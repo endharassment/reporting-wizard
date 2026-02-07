@@ -105,7 +105,7 @@ func FetchAndProcessEmails(cfg IMAPConfig, s store.Store) {
 			}
 	
 			// Check if email with this ID exists
-			_, err = s.GetOutgoingEmail(context.Background(), emailID)
+			outgoingEmail, err := s.GetOutgoingEmail(context.Background(), emailID)
 			if err != nil {
 				log.Printf("INFO: received reply for unknown ticket %s", emailID)
 				continue
@@ -129,8 +129,38 @@ func FetchAndProcessEmails(cfg IMAPConfig, s store.Store) {
 				log.Printf("ERROR: creating email reply: %v", err)
 				continue
 			}
-	
+
 			log.Printf("Saved reply to ticket %s from %s", emailID, fromAddress)
+
+			// Check if the reply came too soon after the original email was sent.
+			// This is to avoid stopping escalation due to an automated reply.
+			const autoReplyGracePeriod = 20 * time.Minute
+			if outgoingEmail.SentAt != nil {
+				if time.Since(*outgoingEmail.SentAt) < autoReplyGracePeriod {
+					log.Printf("INFO: Reply for ticket %s received within grace period (%s since sent). Ignoring for escalation purposes.", emailID, time.Since(*outgoingEmail.SentAt).Round(time.Second))
+				} else {
+					// Prevent escalation by marking the email as replied.
+					outgoingEmail.ResponseNotes = "Replied by " + fromAddress + " at " + time.Now().UTC().Format(time.RFC3339)
+					if err := s.UpdateOutgoingEmail(context.Background(), outgoingEmail); err != nil {
+						log.Printf("ERROR: updating outgoing email %s after reply: %v", emailID, err)
+						continue
+					}
+					log.Printf("Updated outgoing email %s to prevent escalation.", emailID)
+				}
+			} else {
+				log.Printf("WARNING: Outgoing email %s has no SentAt timestamp. Cannot apply auto-reply grace period.", emailID)
+				// Default to marking as replied if SentAt is missing to be safe,
+				// or decide to always escalate if SentAt is missing.
+				// For now, let's assume SentAt should always be present for sent emails.
+				// If not present, we will still update ResponseNotes, as it's better to
+				// err on the side of not escalating than potentially over-escalating.
+				outgoingEmail.ResponseNotes = "Replied by " + fromAddress + " at " + time.Now().UTC().Format(time.RFC3339)
+				if err := s.UpdateOutgoingEmail(context.Background(), outgoingEmail); err != nil {
+					log.Printf("ERROR: updating outgoing email %s after reply (no SentAt): %v", emailID, err)
+					continue
+				}
+				log.Printf("Updated outgoing email %s to prevent escalation (no SentAt, assumed genuine).", emailID)
+			}
 	
 			// Mark email as seen
 			seqsetMark := new(imap.SeqSet)
