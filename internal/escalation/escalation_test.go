@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/endharassment/reporting-wizard/internal/boilerplate"
 	"github.com/endharassment/reporting-wizard/internal/model"
 )
 
@@ -18,6 +20,7 @@ type mockStore struct {
 	reports        map[string]*model.Report
 	infraResults   map[string][]*model.InfraResult // keyed by report ID
 	outgoingEmails map[string]*model.OutgoingEmail
+	emailReplies   map[string][]*model.EmailReply // keyed by outgoing email ID
 	dueEmails      []*model.OutgoingEmail
 }
 
@@ -26,6 +29,7 @@ func newMockStore() *mockStore {
 		reports:        make(map[string]*model.Report),
 		infraResults:   make(map[string][]*model.InfraResult),
 		outgoingEmails: make(map[string]*model.OutgoingEmail),
+		emailReplies:   make(map[string][]*model.EmailReply),
 	}
 }
 
@@ -65,6 +69,72 @@ func (m *mockStore) UpdateOutgoingEmail(_ context.Context, email *model.Outgoing
 	return nil
 }
 
+func (m *mockStore) GetOutgoingEmail(_ context.Context, id string) (*model.OutgoingEmail, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.outgoingEmails[id]
+	if !ok {
+		return nil, fmt.Errorf("email %s not found", id)
+	}
+	return e, nil
+}
+
+func (m *mockStore) GetEmailChain(_ context.Context, emailID string) ([]*model.OutgoingEmail, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Walk the parent chain to build the full chain.
+	var chain []*model.OutgoingEmail
+	current, ok := m.outgoingEmails[emailID]
+	if !ok {
+		return nil, fmt.Errorf("email %s not found", emailID)
+	}
+
+	// Walk up to root.
+	var ids []string
+	for current != nil {
+		ids = append([]string{current.ID}, ids...)
+		if current.ParentEmailID == "" {
+			break
+		}
+		parent, ok := m.outgoingEmails[current.ParentEmailID]
+		if !ok {
+			break
+		}
+		current = parent
+	}
+
+	for _, id := range ids {
+		if e, ok := m.outgoingEmails[id]; ok {
+			chain = append(chain, e)
+		}
+	}
+	return chain, nil
+}
+
+func (m *mockStore) ListEmailRepliesByEmails(_ context.Context, emailIDs []string) (map[string][]*model.EmailReply, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make(map[string][]*model.EmailReply)
+	for _, id := range emailIDs {
+		if replies, ok := m.emailReplies[id]; ok {
+			result[id] = replies
+		}
+	}
+	return result, nil
+}
+
+func (m *mockStore) ListEmailsByReport(_ context.Context, reportID string) ([]*model.OutgoingEmail, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var result []*model.OutgoingEmail
+	for _, e := range m.outgoingEmails {
+		if e.ReportID == reportID {
+			result = append(result, e)
+		}
+	}
+	return result, nil
+}
+
 // createdEscalations returns all emails created with type "escalation".
 func (m *mockStore) createdEscalations() []*model.OutgoingEmail {
 	m.mu.Lock()
@@ -84,7 +154,7 @@ func (m *mockStore) GetUser(context.Context, string) (*model.User, error) { pani
 func (m *mockStore) GetUserByEmail(context.Context, string) (*model.User, error) {
 	panic("not implemented")
 }
-func (m *mockStore) UpdateUser(context.Context, *model.User) error      { panic("not implemented") }
+func (m *mockStore) UpdateUser(context.Context, *model.User) error       { panic("not implemented") }
 func (m *mockStore) ListUsers(context.Context) ([]*model.User, error)    { panic("not implemented") }
 func (m *mockStore) BanUser(context.Context, string) error               { panic("not implemented") }
 func (m *mockStore) CreateSession(context.Context, *model.Session) error { panic("not implemented") }
@@ -123,12 +193,6 @@ func (m *mockStore) GetEvidence(context.Context, string) (*model.Evidence, error
 func (m *mockStore) ListEvidenceByReport(context.Context, string) ([]*model.Evidence, error) {
 	panic("not implemented")
 }
-func (m *mockStore) GetOutgoingEmail(context.Context, string) (*model.OutgoingEmail, error) {
-	panic("not implemented")
-}
-func (m *mockStore) ListEmailsByReport(context.Context, string) ([]*model.OutgoingEmail, error) {
-	panic("not implemented")
-}
 func (m *mockStore) ListEmailsByStatus(context.Context, model.EmailStatus) ([]*model.OutgoingEmail, error) {
 	panic("not implemented")
 }
@@ -148,6 +212,9 @@ func (m *mockStore) CreateEmailReply(context.Context, *model.EmailReply) error {
 	panic("not implemented")
 }
 func (m *mockStore) ListEmailRepliesByEmail(context.Context, string) ([]*model.EmailReply, error) {
+	panic("not implemented")
+}
+func (m *mockStore) ListAllRepliesByReport(context.Context, string) (map[string][]*model.EmailReply, error) {
 	panic("not implemented")
 }
 
@@ -194,6 +261,7 @@ func TestCheckAndEscalate(t *testing.T) {
 					ID:            "email-1",
 					ReportID:      "report-1",
 					Recipient:     "abuse@hosting.example.com",
+					RecipientOrg:  "HOSTING-EXAMPLE",
 					TargetASN:     65001,
 					EmailType:     model.EmailTypeInitialReport,
 					Status:        model.EmailSent,
@@ -231,13 +299,8 @@ func TestCheckAndEscalate(t *testing.T) {
 			wantOriginalNotes:   "escalated",
 		},
 		{
-			name:      "email not yet due is not returned by store",
-			dueEmails: []*model.OutgoingEmail{
-				// This simulates the store NOT returning this email because
-				// escalate_after is in the future. The store's
-				// ListEmailsDueForEscalation already filters by time, but
-				// we test with an empty list to verify no action is taken.
-			},
+			name:                "email not yet due is not returned by store",
+			dueEmails:           []*model.OutgoingEmail{},
 			reports:             map[string]*model.Report{},
 			infraResults:        map[string][]*model.InfraResult{},
 			abuseContacts:       map[int]string{},
@@ -250,6 +313,7 @@ func TestCheckAndEscalate(t *testing.T) {
 					ID:            "email-2",
 					ReportID:      "report-2",
 					Recipient:     "abuse@hosting.example.com",
+					RecipientOrg:  "HOSTING-EXAMPLE",
 					TargetASN:     65001,
 					EmailType:     model.EmailTypeInitialReport,
 					Status:        model.EmailSent,
@@ -276,6 +340,7 @@ func TestCheckAndEscalate(t *testing.T) {
 					ID:            "email-3",
 					ReportID:      "report-3",
 					Recipient:     "abuse@hosting.example.com",
+					RecipientOrg:  "HOSTING-EXAMPLE",
 					TargetASN:     65001,
 					EmailType:     model.EmailTypeInitialReport,
 					Status:        model.EmailSent,
@@ -329,6 +394,7 @@ func TestCheckAndEscalate(t *testing.T) {
 					ID:            "email-4",
 					ReportID:      "report-4",
 					Recipient:     "abuse@hosting.example.com",
+					RecipientOrg:  "HOSTING-EXAMPLE",
 					TargetASN:     65001,
 					EmailType:     model.EmailTypeInitialReport,
 					Status:        model.EmailSent,
@@ -366,10 +432,8 @@ func TestCheckAndEscalate(t *testing.T) {
 			wantOriginalNotes:   "escalated",
 		},
 		{
-			name:      "escalate_after in future is unused because store already filters",
-			dueEmails: []*model.OutgoingEmail{
-				// Store returned empty because escalate_after is in the future.
-			},
+			name:                "escalate_after in future is unused because store already filters",
+			dueEmails:           []*model.OutgoingEmail{},
 			reports:             map[string]*model.Report{},
 			infraResults:        map[string][]*model.InfraResult{},
 			abuseContacts:       map[int]string{},
@@ -431,6 +495,319 @@ func TestCheckAndEscalate(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestEscalateNow(t *testing.T) {
+	now := time.Now().UTC()
+	pastDate := now.Add(-10 * 24 * time.Hour)
+	sentAt := pastDate
+
+	s := newMockStore()
+	s.reports["report-1"] = &model.Report{
+		ID:            "report-1",
+		Domain:        "bad.example.com",
+		URLs:          []string{"https://bad.example.com/page1"},
+		ViolationType: model.ViolationHarassment,
+		Description:   "Harassment content",
+	}
+	s.infraResults["report-1"] = []*model.InfraResult{
+		{
+			ID:           "infra-1",
+			ReportID:     "report-1",
+			IP:           "198.51.100.1",
+			ASN:          65001,
+			ASNName:      "HOSTING-EXAMPLE",
+			UpstreamASNs: []int{174},
+		},
+	}
+
+	email := &model.OutgoingEmail{
+		ID:            "email-esc-now",
+		ReportID:      "report-1",
+		Recipient:     "abuse@hosting.example.com",
+		RecipientOrg:  "HOSTING-EXAMPLE",
+		TargetASN:     65001,
+		EmailType:     model.EmailTypeInitialReport,
+		Status:        model.EmailSent,
+		SentAt:        &sentAt,
+		ResponseNotes: "Replied by noreply@hosting.example.com at 2026-01-01T00:00:00Z",
+		CreatedAt:     pastDate,
+	}
+	s.outgoingEmails[email.ID] = email
+
+	ac := &mockAbuseContactLookup{contacts: map[int]string{
+		174: "abuse@cogent.net",
+	}}
+	engine := NewEngine(s, ac, 7, testLogger())
+
+	created, err := engine.EscalateNow(context.Background(), "email-esc-now")
+	if err != nil {
+		t.Fatalf("EscalateNow failed: %v", err)
+	}
+	if created != 1 {
+		t.Errorf("EscalateNow created %d emails, want 1", created)
+	}
+
+	// Verify original email's ResponseNotes was first cleared, then set to "escalated".
+	stored := s.outgoingEmails["email-esc-now"]
+	if stored.ResponseNotes != "escalated" {
+		t.Errorf("original email ResponseNotes = %q, want %q", stored.ResponseNotes, "escalated")
+	}
+
+	// Verify escalation was created.
+	escalations := s.createdEscalations()
+	if len(escalations) != 1 {
+		t.Fatalf("got %d escalation emails, want 1", len(escalations))
+	}
+	if escalations[0].Recipient != "abuse@cogent.net" {
+		t.Errorf("escalation recipient = %q, want %q", escalations[0].Recipient, "abuse@cogent.net")
+	}
+}
+
+func TestEscalationBodyContainsContactHistory(t *testing.T) {
+	now := time.Now().UTC()
+	pastDate := now.Add(-14 * 24 * time.Hour)
+	sentAt := pastDate
+	replySentAt := pastDate.Add(1 * 24 * time.Hour)
+
+	s := newMockStore()
+	s.reports["report-1"] = &model.Report{
+		ID:            "report-1",
+		Domain:        "bad.example.com",
+		URLs:          []string{"https://bad.example.com/page1"},
+		ViolationType: model.ViolationHarassment,
+		Description:   "Harassment content",
+	}
+	s.infraResults["report-1"] = []*model.InfraResult{
+		{
+			ID:           "infra-1",
+			ReportID:     "report-1",
+			IP:           "198.51.100.1",
+			ASN:          65001,
+			ASNName:      "HOSTING-EXAMPLE",
+			UpstreamASNs: []int{174},
+		},
+	}
+
+	// Initial email that was sent and received a reply.
+	initialEmail := &model.OutgoingEmail{
+		ID:            "email-initial",
+		ReportID:      "report-1",
+		Recipient:     "abuse@hosting.example.com",
+		RecipientOrg:  "HOSTING-EXAMPLE",
+		TargetASN:     65001,
+		EmailType:     model.EmailTypeInitialReport,
+		Status:        model.EmailSent,
+		SentAt:        &sentAt,
+		ResponseNotes: "escalated",
+		CreatedAt:     pastDate,
+	}
+	s.outgoingEmails[initialEmail.ID] = initialEmail
+
+	// Simulated first escalation email that's now due.
+	escDate := pastDate.Add(7 * 24 * time.Hour)
+	escSentAt := escDate
+	firstEscEmail := &model.OutgoingEmail{
+		ID:            "email-esc-1",
+		ReportID:      "report-1",
+		ParentEmailID: "email-initial",
+		Recipient:     "abuse@transit.example.com",
+		RecipientOrg:  "AS174",
+		TargetASN:     174,
+		EmailType:     model.EmailTypeEscalation,
+		Status:        model.EmailSent,
+		SentAt:        &escSentAt,
+		CreatedAt:     escDate,
+	}
+	s.outgoingEmails[firstEscEmail.ID] = firstEscEmail
+
+	// Reply to the initial email.
+	s.emailReplies[initialEmail.ID] = []*model.EmailReply{
+		{
+			ID:              "reply-1",
+			OutgoingEmailID: initialEmail.ID,
+			FromAddress:     "noreply@hosting.example.com",
+			Body:            "We have reviewed your report and will not take action.",
+			CreatedAt:       replySentAt,
+		},
+	}
+
+	s.dueEmails = []*model.OutgoingEmail{firstEscEmail}
+
+	ac := &mockAbuseContactLookup{contacts: map[int]string{
+		174: "abuse@cogent.net",
+	}}
+	engine := NewEngine(s, ac, 7, testLogger())
+
+	engine.checkAndEscalate(context.Background())
+
+	escalations := s.createdEscalations()
+	// Filter to only new escalations (not the pre-existing firstEscEmail).
+	var newEscalations []*model.OutgoingEmail
+	for _, e := range escalations {
+		if e.ID != "email-esc-1" {
+			newEscalations = append(newEscalations, e)
+		}
+	}
+
+	if len(newEscalations) != 1 {
+		t.Fatalf("got %d new escalation emails, want 1", len(newEscalations))
+	}
+
+	body := newEscalations[0].EmailBody
+
+	// Verify contact history section exists.
+	if !strings.Contains(body, "== Contact History ==") {
+		t.Error("escalation body missing Contact History section")
+	}
+
+	// Verify the initial report is mentioned.
+	if !strings.Contains(body, "abuse@hosting.example.com") {
+		t.Error("escalation body missing reference to initial abuse contact")
+	}
+
+	// Verify the reply text is included.
+	if !strings.Contains(body, "will not take action") {
+		t.Error("escalation body missing reply text from downstream provider")
+	}
+
+	// Verify original report details are present.
+	if !strings.Contains(body, "== Original Report Details ==") {
+		t.Error("escalation body missing Original Report Details section")
+	}
+}
+
+func TestEscalationBodyContainsPeerNotification(t *testing.T) {
+	now := time.Now().UTC()
+	pastDate := now.Add(-10 * 24 * time.Hour)
+	sentAt := pastDate
+
+	s := newMockStore()
+	s.reports["report-1"] = &model.Report{
+		ID:            "report-1",
+		Domain:        "bad.example.com",
+		URLs:          []string{"https://bad.example.com/page1"},
+		ViolationType: model.ViolationHarassment,
+		Description:   "Harassment content",
+	}
+	s.infraResults["report-1"] = []*model.InfraResult{
+		{
+			ID:           "infra-1",
+			ReportID:     "report-1",
+			IP:           "198.51.100.1",
+			ASN:          65001,
+			ASNName:      "HOSTING-EXAMPLE",
+			UpstreamASNs: []int{174, 3356, 6939},
+		},
+	}
+
+	email := &model.OutgoingEmail{
+		ID:           "email-peer",
+		ReportID:     "report-1",
+		Recipient:    "abuse@hosting.example.com",
+		RecipientOrg: "HOSTING-EXAMPLE",
+		TargetASN:    65001,
+		EmailType:    model.EmailTypeInitialReport,
+		Status:       model.EmailSent,
+		SentAt:       &sentAt,
+		CreatedAt:    pastDate,
+	}
+	s.outgoingEmails[email.ID] = email
+	s.dueEmails = []*model.OutgoingEmail{email}
+
+	ac := &mockAbuseContactLookup{contacts: map[int]string{
+		174:  "abuse@cogent.net",
+		3356: "abuse@lumen.com",
+		6939: "abuse@he.net",
+	}}
+	engine := NewEngine(s, ac, 7, testLogger())
+
+	engine.checkAndEscalate(context.Background())
+
+	escalations := s.createdEscalations()
+	if len(escalations) != 3 {
+		t.Fatalf("got %d escalation emails, want 3", len(escalations))
+	}
+
+	// Each escalation should mention the other two as peers.
+	for _, esc := range escalations {
+		if !strings.Contains(esc.EmailBody, "== Peer Escalations ==") {
+			t.Errorf("escalation to AS%d missing Peer Escalations section", esc.TargetASN)
+		}
+
+		// Count how many other peers are mentioned.
+		peerCount := 0
+		for _, otherEsc := range escalations {
+			if otherEsc.TargetASN != esc.TargetASN {
+				if strings.Contains(esc.EmailBody, otherEsc.Recipient) {
+					peerCount++
+				}
+			}
+		}
+		if peerCount != 2 {
+			t.Errorf("escalation to AS%d mentions %d peers, want 2", esc.TargetASN, peerCount)
+		}
+	}
+}
+
+func TestEscalationBodyContainsBoilerplate(t *testing.T) {
+	now := time.Now().UTC()
+	pastDate := now.Add(-10 * 24 * time.Hour)
+	sentAt := pastDate
+
+	s := newMockStore()
+	s.reports["report-1"] = &model.Report{
+		ID:            "report-1",
+		Domain:        "kiwifarms.net",
+		URLs:          []string{"https://kiwifarms.net/threads/example"},
+		ViolationType: model.ViolationHarassment,
+		Description:   "Harassment content",
+	}
+	s.infraResults["report-1"] = []*model.InfraResult{
+		{
+			ID:           "infra-1",
+			ReportID:     "report-1",
+			IP:           "198.51.100.1",
+			ASN:          65001,
+			ASNName:      "HOSTING-EXAMPLE",
+			UpstreamASNs: []int{174},
+		},
+	}
+
+	email := &model.OutgoingEmail{
+		ID:           "email-bp",
+		ReportID:     "report-1",
+		Recipient:    "abuse@hosting.example.com",
+		RecipientOrg: "HOSTING-EXAMPLE",
+		TargetASN:    65001,
+		EmailType:    model.EmailTypeInitialReport,
+		Status:       model.EmailSent,
+		SentAt:       &sentAt,
+		CreatedAt:    pastDate,
+	}
+	s.outgoingEmails[email.ID] = email
+	s.dueEmails = []*model.OutgoingEmail{email}
+
+	ac := &mockAbuseContactLookup{contacts: map[int]string{
+		174: "abuse@cogent.net",
+	}}
+	engine := NewEngine(s, ac, 7, testLogger())
+	engine.SetBoilerplate(boilerplate.NewDB())
+
+	engine.checkAndEscalate(context.Background())
+
+	escalations := s.createdEscalations()
+	if len(escalations) != 1 {
+		t.Fatalf("got %d escalation emails, want 1", len(escalations))
+	}
+
+	body := escalations[0].EmailBody
+	if !strings.Contains(body, "== Context regarding Kiwi Farms ==") {
+		t.Error("escalation body missing boilerplate section for Kiwi Farms")
+	}
+	if !strings.Contains(body, "harassment and doxxing forum") {
+		t.Error("escalation body missing Kiwi Farms summary content")
 	}
 }
 

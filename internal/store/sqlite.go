@@ -78,7 +78,6 @@ func (s *SQLiteStore) GetUserByEmail(ctx context.Context, email string) (*model.
 		`SELECT id, email, name, is_admin, banned, google_access_token, google_refresh_token, google_token_expiry, created_at FROM users WHERE email = ?`, email))
 }
 
-
 func (s *SQLiteStore) UpdateUser(ctx context.Context, user *model.User) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE users SET email = ?, name = ?, is_admin = ?, google_access_token = ?, google_refresh_token = ?, google_token_expiry = ? WHERE id = ?`,
@@ -114,7 +113,6 @@ func (s *SQLiteStore) ListUsers(ctx context.Context) ([]*model.User, error) {
 type scannable interface {
 	Scan(dest ...interface{}) error
 }
-
 
 func (s *SQLiteStore) CreateUser(ctx context.Context, user *model.User) error {
 	_, err := s.db.ExecContext(ctx,
@@ -630,6 +628,92 @@ func (s *SQLiteStore) ListEmailRepliesByEmail(ctx context.Context, emailID strin
 		replies = append(replies, &r)
 	}
 	return replies, rows.Err()
+}
+
+func (s *SQLiteStore) GetEmailChain(ctx context.Context, emailID string) ([]*model.OutgoingEmail, error) {
+	query := `WITH RECURSIVE chain AS (
+		SELECT id, parent_email_id FROM outgoing_emails WHERE id = ?
+		UNION ALL
+		SELECT oe.id, oe.parent_email_id FROM outgoing_emails oe
+		JOIN chain c ON c.parent_email_id = oe.id
+		WHERE c.parent_email_id != ''
+	)
+	SELECT id, report_id, parent_email_id, recipient, recipient_org, target_asn, email_type,
+	 xarf_json, email_subject, email_body, status, approved_by, approved_at, sent_at,
+	 sendgrid_id, escalate_after, response_notes, created_at
+	 FROM outgoing_emails WHERE id IN (SELECT id FROM chain)
+	 ORDER BY created_at ASC`
+
+	rows, err := s.db.QueryContext(ctx, query, emailID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return s.scanEmails(rows)
+}
+
+func (s *SQLiteStore) ListAllRepliesByReport(ctx context.Context, reportID string) (map[string][]*model.EmailReply, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT er.id, er.outgoing_email_id, er.from_address, er.body, er.created_at
+		 FROM email_replies er
+		 JOIN outgoing_emails oe ON er.outgoing_email_id = oe.id
+		 WHERE oe.report_id = ?
+		 ORDER BY er.created_at`, reportID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]*model.EmailReply)
+	for rows.Next() {
+		var r model.EmailReply
+		var createdAt string
+		err := rows.Scan(&r.ID, &r.OutgoingEmailID, &r.FromAddress, &r.Body, &createdAt)
+		if err != nil {
+			return nil, err
+		}
+		r.CreatedAt, _ = time.Parse(timeFormat, createdAt)
+		result[r.OutgoingEmailID] = append(result[r.OutgoingEmailID], &r)
+	}
+	return result, rows.Err()
+}
+
+func (s *SQLiteStore) ListEmailRepliesByEmails(ctx context.Context, emailIDs []string) (map[string][]*model.EmailReply, error) {
+	if len(emailIDs) == 0 {
+		return make(map[string][]*model.EmailReply), nil
+	}
+
+	placeholders := make([]string, len(emailIDs))
+	args := make([]interface{}, len(emailIDs))
+	for i, id := range emailIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := fmt.Sprintf(
+		`SELECT id, outgoing_email_id, from_address, body, created_at
+		 FROM email_replies WHERE outgoing_email_id IN (%s)
+		 ORDER BY created_at`,
+		strings.Join(placeholders, ", "))
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make(map[string][]*model.EmailReply)
+	for rows.Next() {
+		var r model.EmailReply
+		var createdAt string
+		err := rows.Scan(&r.ID, &r.OutgoingEmailID, &r.FromAddress, &r.Body, &createdAt)
+		if err != nil {
+			return nil, err
+		}
+		r.CreatedAt, _ = time.Parse(timeFormat, createdAt)
+		result[r.OutgoingEmailID] = append(result[r.OutgoingEmailID], &r)
+	}
+	return result, rows.Err()
 }
 
 // --- Helpers ---

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/endharassment/reporting-wizard/internal/boilerplate"
 	"github.com/endharassment/reporting-wizard/internal/model"
 	"github.com/endharassment/reporting-wizard/internal/store"
 	"github.com/google/uuid"
@@ -17,11 +18,18 @@ type AbuseContactLookup interface {
 	LookupAbuseContactByASN(ctx context.Context, asn int) (string, error)
 }
 
+// upstreamTarget holds a resolved upstream ASN and its abuse contact.
+type upstreamTarget struct {
+	ASN          int
+	AbuseContact string
+}
+
 // Engine checks for emails that are due for escalation and creates
 // escalation emails to upstream providers.
 type Engine struct {
 	store          store.Store
 	abuseContact   AbuseContactLookup
+	boilerplate    *boilerplate.DB
 	escalationDays int
 	tickInterval   time.Duration
 	logger         *slog.Logger
@@ -36,6 +44,11 @@ func NewEngine(s store.Store, ac AbuseContactLookup, escalationDays int, logger 
 		tickInterval:   1 * time.Hour,
 		logger:         logger,
 	}
+}
+
+// SetBoilerplate configures the domain boilerplate database.
+func (e *Engine) SetBoilerplate(db *boilerplate.DB) {
+	e.boilerplate = db
 }
 
 // SetTickInterval overrides the default tick interval (for testing).
@@ -61,6 +74,24 @@ func (e *Engine) Run(ctx context.Context) error {
 			e.checkAndEscalate(ctx)
 		}
 	}
+}
+
+// EscalateNow immediately triggers escalation for a specific email,
+// bypassing the escalation timer. This is used when an admin sees a
+// provider refusal and wants to escalate right away.
+func (e *Engine) EscalateNow(ctx context.Context, emailID string) (int, error) {
+	email, err := e.store.GetOutgoingEmail(ctx, emailID)
+	if err != nil {
+		return 0, fmt.Errorf("getting email %s: %w", emailID, err)
+	}
+
+	// Clear ResponseNotes so the email is eligible for escalation.
+	email.ResponseNotes = ""
+	if err := e.store.UpdateOutgoingEmail(ctx, email); err != nil {
+		return 0, fmt.Errorf("clearing response_notes for email %s: %w", emailID, err)
+	}
+
+	return e.escalateEmail(ctx, email, time.Now().UTC())
 }
 
 // checkAndEscalate finds emails due for escalation and creates escalation
@@ -112,6 +143,32 @@ func (e *Engine) escalateEmail(ctx context.Context, email *model.OutgoingEmail, 
 		return 0, fmt.Errorf("listing infra results for report %s: %w", email.ReportID, err)
 	}
 
+	// Get the full email chain for contact history.
+	chain, err := e.store.GetEmailChain(ctx, email.ID)
+	if err != nil {
+		e.logger.Warn("could not fetch email chain, proceeding without history",
+			"email_id", email.ID, "error", err)
+		chain = []*model.OutgoingEmail{email}
+	}
+
+	// Batch-fetch replies for all emails in the chain.
+	chainIDs := make([]string, len(chain))
+	for i, ce := range chain {
+		chainIDs[i] = ce.ID
+	}
+	repliesByEmail, err := e.store.ListEmailRepliesByEmails(ctx, chainIDs)
+	if err != nil {
+		e.logger.Warn("could not fetch chain replies, proceeding without",
+			"email_id", email.ID, "error", err)
+		repliesByEmail = make(map[string][]*model.EmailReply)
+	}
+
+	// Look up domain boilerplate.
+	var domainInfo *boilerplate.DomainInfo
+	if e.boilerplate != nil {
+		domainInfo = e.boilerplate.Lookup(report.Domain)
+	}
+
 	// Collect unique upstream ASNs across all infra results.
 	upstreamASNs := make(map[int]bool)
 	for _, ir := range infraResults {
@@ -127,44 +184,42 @@ func (e *Engine) escalateEmail(ctx context.Context, email *model.OutgoingEmail, 
 		)
 	}
 
-	created := 0
-	// Deduplicate abuse contacts to avoid sending multiple emails to the same address.
+	// First pass: resolve all upstream contacts so we know the full peer set.
+	var targets []upstreamTarget
 	seenContacts := make(map[string]bool)
 
 	for asn := range upstreamASNs {
 		abuseContact, err := e.abuseContact.LookupAbuseContactByASN(ctx, asn)
 		if err != nil {
 			e.logger.Error("looking up abuse contact for upstream ASN",
-				"asn", asn,
-				"email_id", email.ID,
-				"error", err,
-			)
+				"asn", asn, "email_id", email.ID, "error", err)
 			continue
 		}
 		if abuseContact == "" {
 			e.logger.Warn("no abuse contact found for upstream ASN",
-				"asn", asn,
-				"email_id", email.ID,
-			)
+				"asn", asn, "email_id", email.ID)
 			continue
 		}
-
 		if seenContacts[abuseContact] {
 			continue
 		}
 		seenContacts[abuseContact] = true
+		targets = append(targets, upstreamTarget{ASN: asn, AbuseContact: abuseContact})
+	}
 
-		sentDate := ""
-		if email.SentAt != nil {
-			sentDate = email.SentAt.Format("2006-01-02")
-		} else {
-			sentDate = email.CreatedAt.Format("2006-01-02")
+	// Second pass: create escalation emails with full context.
+	created := 0
+	for _, target := range targets {
+		// Build peer list (all other targets in this batch).
+		var peers []upstreamTarget
+		for _, other := range targets {
+			if other.ASN != target.ASN {
+				peers = append(peers, other)
+			}
 		}
 
-		days := int(now.Sub(email.CreatedAt).Hours() / 24)
-
-		body := composeEscalationBody(report, email, asn, sentDate, days)
-		subject := fmt.Sprintf("Escalation: Abuse Report for %s (upstream AS%d)", report.Domain, asn)
+		body := composeEscalationBody(report, chain, repliesByEmail, target.ASN, peers, domainInfo, now)
+		subject := fmt.Sprintf("Escalation: Abuse Report for %s (upstream AS%d)", report.Domain, target.ASN)
 
 		escAfter := now.Add(time.Duration(e.escalationDays) * 24 * time.Hour)
 
@@ -172,9 +227,9 @@ func (e *Engine) escalateEmail(ctx context.Context, email *model.OutgoingEmail, 
 			ID:            uuid.New().String(),
 			ReportID:      email.ReportID,
 			ParentEmailID: email.ID,
-			Recipient:     abuseContact,
-			RecipientOrg:  fmt.Sprintf("AS%d", asn),
-			TargetASN:     asn,
+			Recipient:     target.AbuseContact,
+			RecipientOrg:  fmt.Sprintf("AS%d", target.ASN),
+			TargetASN:     target.ASN,
 			EmailType:     model.EmailTypeEscalation,
 			XARFJson:      email.XARFJson,
 			EmailSubject:  subject,
@@ -186,7 +241,7 @@ func (e *Engine) escalateEmail(ctx context.Context, email *model.OutgoingEmail, 
 
 		if err := e.store.CreateOutgoingEmail(ctx, escEmail); err != nil {
 			e.logger.Error("creating escalation email",
-				"upstream_asn", asn,
+				"upstream_asn", target.ASN,
 				"email_id", email.ID,
 				"error", err,
 			)
@@ -195,8 +250,8 @@ func (e *Engine) escalateEmail(ctx context.Context, email *model.OutgoingEmail, 
 
 		e.logger.Info("created escalation email",
 			"escalation_id", escEmail.ID,
-			"upstream_asn", asn,
-			"recipient", abuseContact,
+			"upstream_asn", target.ASN,
+			"recipient", target.AbuseContact,
 			"parent_email_id", email.ID,
 		)
 		created++
@@ -211,29 +266,119 @@ func (e *Engine) escalateEmail(ctx context.Context, email *model.OutgoingEmail, 
 	return created, nil
 }
 
-func composeEscalationBody(report *model.Report, original *model.OutgoingEmail, upstreamASN int, sentDate string, days int) string {
+func composeEscalationBody(
+	report *model.Report,
+	chain []*model.OutgoingEmail,
+	repliesByEmail map[string][]*model.EmailReply,
+	targetASN int,
+	peers []upstreamTarget,
+	domainInfo *boilerplate.DomainInfo,
+	now time.Time,
+) string {
 	var b strings.Builder
 
 	b.WriteString("Dear Abuse Team,\n\n")
-	b.WriteString(fmt.Sprintf(
-		"Report %s regarding %s was filed with %s (AS%d) on %s. "+
-			"No action has been taken after %d days. "+
-			"We are escalating to you as an upstream provider.\n\n",
-		report.ID, report.Domain, original.Recipient, original.TargetASN, sentDate, days,
-	))
 
-	b.WriteString("Original report details:\n")
-	b.WriteString(fmt.Sprintf("  Domain: %s\n", report.Domain))
+	// Identify the downstream provider (first email in the chain, the initial report).
+	if len(chain) > 0 {
+		initial := chain[0]
+		b.WriteString(fmt.Sprintf(
+			"We are escalating an abuse report regarding %s to you as an upstream "+
+				"provider of %s (AS%d).\n\n",
+			report.Domain, initial.RecipientOrg, initial.TargetASN,
+		))
+	}
+
+	// Contact History section.
+	if len(chain) > 0 {
+		b.WriteString("== Contact History ==\n\n")
+		for i, ce := range chain {
+			sentDate := "not yet sent"
+			if ce.SentAt != nil {
+				sentDate = ce.SentAt.Format("2006-01-02")
+			}
+
+			label := "Initial report"
+			if ce.EmailType == model.EmailTypeEscalation {
+				label = "Escalation"
+			}
+
+			b.WriteString(fmt.Sprintf("%d. %s to %s (%s)\n",
+				i+1, label, ce.Recipient, ce.RecipientOrg))
+			b.WriteString(fmt.Sprintf("   Sent: %s\n", sentDate))
+
+			// Show replies for this email.
+			replies := repliesByEmail[ce.ID]
+			if len(replies) > 0 {
+				for _, r := range replies {
+					b.WriteString(fmt.Sprintf("   Reply from %s on %s:\n",
+						r.FromAddress, r.CreatedAt.Format("2006-01-02")))
+					// Truncate reply body to 500 chars for the escalation email.
+					body := r.Body
+					if len(body) > 500 {
+						body = body[:500] + "..."
+					}
+					// Indent each line of the reply.
+					for _, line := range strings.Split(body, "\n") {
+						b.WriteString(fmt.Sprintf("     %s\n", line))
+					}
+				}
+			}
+
+			// Show status.
+			if ce.ResponseNotes == "escalated" {
+				if ce.SentAt != nil {
+					days := int(now.Sub(*ce.SentAt).Hours() / 24)
+					b.WriteString(fmt.Sprintf("   Status: No action taken after %d days\n", days))
+				} else {
+					b.WriteString("   Status: Escalated\n")
+				}
+			} else if ce.ResponseNotes != "" && len(replies) == 0 {
+				b.WriteString(fmt.Sprintf("   Status: %s\n", ce.ResponseNotes))
+			} else if len(replies) > 0 {
+				b.WriteString("   Status: Reply received, no resolution\n")
+			} else {
+				b.WriteString("   Status: No response\n")
+			}
+			b.WriteString("\n")
+		}
+
+		b.WriteString(fmt.Sprintf("%d. Current escalation to you (AS%d)\n\n",
+			len(chain)+1, targetASN))
+	}
+
+	// Domain boilerplate section.
+	if domainInfo != nil {
+		b.WriteString(fmt.Sprintf("== Context regarding %s ==\n\n", domainInfo.DisplayName))
+		b.WriteString(domainInfo.Summary)
+		b.WriteString("\n\n")
+		b.WriteString(domainInfo.Context)
+		b.WriteString("\n\n")
+	}
+
+	// Peer escalations section.
+	if len(peers) > 0 {
+		b.WriteString("== Peer Escalations ==\n\n")
+		b.WriteString("This report is also being escalated to:\n")
+		for _, peer := range peers {
+			b.WriteString(fmt.Sprintf("  - %s (AS%d)\n", peer.AbuseContact, peer.ASN))
+		}
+		b.WriteString("\n")
+	}
+
+	// Original report details.
+	b.WriteString("== Original Report Details ==\n\n")
+	b.WriteString(fmt.Sprintf("Domain: %s\n", report.Domain))
 	if len(report.URLs) > 0 {
-		b.WriteString("  URLs:\n")
+		b.WriteString("URLs:\n")
 		for _, u := range report.URLs {
-			b.WriteString(fmt.Sprintf("    - %s\n", u))
+			b.WriteString(fmt.Sprintf("  - %s\n", u))
 		}
 	}
-	b.WriteString(fmt.Sprintf("  Violation: %s\n", report.ViolationType))
-	b.WriteString(fmt.Sprintf("  Description: %s\n\n", report.Description))
+	b.WriteString(fmt.Sprintf("Violation: %s\n", report.ViolationType))
+	b.WriteString(fmt.Sprintf("Description: %s\n\n", report.Description))
 
-	b.WriteString("The original machine-readable X-ARF v4 report is attached to this email.\n\n")
+	b.WriteString("A machine-readable X-ARF v4 report is attached to this email.\n\n")
 	b.WriteString("We request that you investigate this matter and take appropriate action.\n\n")
 	b.WriteString("Regards,\n")
 	b.WriteString("End Network Harassment Inc Reporting Wizard\n")

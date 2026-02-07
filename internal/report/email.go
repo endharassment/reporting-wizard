@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/endharassment/reporting-wizard/internal/boilerplate"
 	"github.com/endharassment/reporting-wizard/internal/model"
 	"github.com/google/uuid"
 	"github.com/sendgrid/sendgrid-go"
@@ -21,6 +22,8 @@ type EmailConfig struct {
 	SandboxMode bool
 	// SendGridAPIKey is the API key for SendGrid.
 	SendGridAPIKey string
+	// Boilerplate provides domain-specific context for known problem domains.
+	Boilerplate *boilerplate.DB
 }
 
 // ComposeEmail builds a model.OutgoingEmail from a report, its infrastructure
@@ -85,6 +88,17 @@ func composeBody(cfg EmailConfig, report *model.Report, infraResults []*model.In
 	b.WriteString("Description:\n")
 	b.WriteString(report.Description)
 	b.WriteString("\n\n")
+
+	// Add domain-specific boilerplate if available.
+	if cfg.Boilerplate != nil {
+		if info := cfg.Boilerplate.Lookup(report.Domain); info != nil {
+			b.WriteString(fmt.Sprintf("Context regarding %s:\n", info.DisplayName))
+			b.WriteString(info.Summary)
+			b.WriteString("\n\n")
+			b.WriteString(info.Context)
+			b.WriteString("\n\n")
+		}
+	}
 
 	if len(infraResults) > 0 {
 		b.WriteString("Infrastructure Details:\n")
