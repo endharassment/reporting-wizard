@@ -60,4 +60,7 @@ type Store interface {
 	// Email Replies
 	CreateEmailReply(ctx context.Context, reply *model.EmailReply) error
 	ListEmailRepliesByEmail(ctx context.Context, emailID string) ([]*model.EmailReply, error)
+	GetEmailChain(ctx context.Context, emailID string) ([]*model.OutgoingEmail, error)
+	ListAllRepliesByReport(ctx context.Context, reportID string) (map[string][]*model.EmailReply, error)
+	ListEmailRepliesByEmails(ctx context.Context, emailIDs []string) (map[string][]*model.EmailReply, error)
 }

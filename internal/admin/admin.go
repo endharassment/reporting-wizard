@@ -26,6 +26,11 @@ type UserFunc func(ctx context.Context) *model.User
 // CSRFFunc extracts the CSRF token from a context.
 type CSRFFunc func(ctx context.Context) string
 
+// Escalator triggers immediate escalation for an outgoing email.
+type Escalator interface {
+	EscalateNow(ctx context.Context, emailID string) (int, error)
+}
+
 // AdminHandler holds dependencies for admin route handlers.
 type AdminHandler struct {
 	store     store.Store
@@ -34,6 +39,7 @@ type AdminHandler struct {
 	templates *template.Template
 	getUser   UserFunc
 	getCSRF   CSRFFunc
+	escalator Escalator
 }
 
 // NewAdminHandler creates an AdminHandler.
@@ -46,6 +52,11 @@ func NewAdminHandler(s store.Store, d *infra.Discovery, emailCfg report.EmailCon
 		getUser:   getUser,
 		getCSRF:   getCSRF,
 	}
+}
+
+// SetEscalator configures the escalation engine for immediate escalation actions.
+func (h *AdminHandler) SetEscalator(e Escalator) {
+	h.escalator = e
 }
 
 // DashboardCounts holds the counts shown on the admin dashboard.
@@ -100,12 +111,16 @@ func (h *AdminHandler) HandleReportView(w http.ResponseWriter, r *http.Request) 
 	}
 
 	evidence, _ := h.store.ListEvidenceByReport(r.Context(), reportID)
+	emails, _ := h.store.ListEmailsByReport(r.Context(), reportID)
+	repliesByEmail, _ := h.store.ListAllRepliesByReport(r.Context(), reportID)
 	auditLog, _ := h.store.ListAuditLogByTarget(r.Context(), reportID)
 
 	h.render(w, r, "report.html", map[string]interface{}{
-		"Report":   rpt,
-		"Evidence": evidence,
-		"AuditLog": auditLog,
+		"Report":         rpt,
+		"Evidence":       evidence,
+		"Emails":         emails,
+		"RepliesByEmail": repliesByEmail,
+		"AuditLog":       auditLog,
 	})
 }
 
@@ -425,7 +440,6 @@ func (h *AdminHandler) HandleReportAbuse(w http.ResponseWriter, r *http.Request)
 	})
 }
 
-
 // HandleSendEmailToUser sends a custom email to the user who filed the report.
 func (h *AdminHandler) HandleSendEmailToUser(w http.ResponseWriter, r *http.Request) {
 	reportID := chi.URLParam(r, "reportID")
@@ -455,6 +469,89 @@ func (h *AdminHandler) HandleSendEmailToUser(w http.ResponseWriter, r *http.Requ
 	h.createAuditEntry(r, adminUser.ID, "sent_user_email", reportID, details)
 
 	http.Redirect(w, r, fmt.Sprintf("/admin/reports/%s", reportID), http.StatusFound)
+}
+
+// HandleReplyAction processes admin actions on email replies.
+// Supported actions: resolve, escalate_now, ignore_autoreply.
+func (h *AdminHandler) HandleReplyAction(w http.ResponseWriter, r *http.Request) {
+	emailID := chi.URLParam(r, "emailID")
+	user := h.getUser(r.Context())
+	action := r.FormValue("action")
+	notes := r.FormValue("notes")
+
+	email, err := h.store.GetOutgoingEmail(r.Context(), emailID)
+	if err != nil {
+		http.Error(w, "Email not found", http.StatusNotFound)
+		return
+	}
+
+	switch action {
+	case "resolve":
+		resolveNotes := "resolved"
+		if notes != "" {
+			resolveNotes = "resolved: " + notes
+		}
+		email.ResponseNotes = resolveNotes
+		if err := h.store.UpdateOutgoingEmail(r.Context(), email); err != nil {
+			log.Printf("ERROR: resolve email: %v", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		// Update report status to resolved.
+		rpt, err := h.store.GetReport(r.Context(), email.ReportID)
+		if err == nil {
+			rpt.Status = model.StatusResolved
+			rpt.UpdatedAt = time.Now().UTC()
+			_ = h.store.UpdateReport(r.Context(), rpt)
+		}
+
+		// Cancel pending escalation emails for this report.
+		reportEmails, _ := h.store.ListEmailsByReport(r.Context(), email.ReportID)
+		for _, re := range reportEmails {
+			if re.Status == model.EmailPendingApproval && re.EmailType == model.EmailTypeEscalation {
+				re.Status = model.EmailRejected
+				re.ResponseNotes = "cancelled: report resolved"
+				_ = h.store.UpdateOutgoingEmail(r.Context(), re)
+			}
+		}
+
+		h.createAuditEntry(r, user.ID, "reply_resolved", emailID,
+			fmt.Sprintf("Marked email to %s as resolved: %s", email.Recipient, notes))
+
+	case "escalate_now":
+		if h.escalator == nil {
+			http.Error(w, "Escalation engine not configured", http.StatusInternalServerError)
+			return
+		}
+
+		created, err := h.escalator.EscalateNow(r.Context(), emailID)
+		if err != nil {
+			log.Printf("ERROR: escalate now: %v", err)
+			http.Error(w, "Escalation failed", http.StatusInternalServerError)
+			return
+		}
+
+		h.createAuditEntry(r, user.ID, "reply_escalate_now", emailID,
+			fmt.Sprintf("Immediate escalation triggered for email to %s, %d escalation emails created", email.Recipient, created))
+
+	case "ignore_autoreply":
+		email.ResponseNotes = ""
+		if err := h.store.UpdateOutgoingEmail(r.Context(), email); err != nil {
+			log.Printf("ERROR: clear response notes: %v", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		h.createAuditEntry(r, user.ID, "reply_ignore_autoreply", emailID,
+			fmt.Sprintf("Auto-reply ignored for email to %s, escalation timer resumed", email.Recipient))
+
+	default:
+		http.Error(w, "Invalid action", http.StatusBadRequest)
+		return
+	}
+
+	http.Redirect(w, r, fmt.Sprintf("/admin/reports/%s", email.ReportID), http.StatusFound)
 }
 
 // --- Helpers ---

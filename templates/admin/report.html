@@ -51,6 +51,80 @@
     {{ end }}
   </section>
 
+  {{ if .Emails }}
+  <section class="detail-section">
+    <h2>Outgoing Emails &amp; Replies</h2>
+    {{ range .Emails }}
+    <div class="email-entry" id="email-{{ .ID }}">
+      <h3>
+        {{ if eq (string .EmailType) "escalation" }}Escalation{{ else }}Initial Report{{ end }}
+        to {{ .Recipient }} ({{ .RecipientOrg }})
+      </h3>
+      <dl>
+        <dt>Status</dt>
+        <dd><span class="badge badge-{{ .Status }}">{{ .Status }}</span></dd>
+        <dt>Created</dt>
+        <dd><time datetime="{{ .CreatedAt.Format "2006-01-02T15:04:05Z" }}">{{ .CreatedAt.Format "Jan 2, 2006 3:04 PM" }}</time></dd>
+        {{ if .SentAt }}
+        <dt>Sent</dt>
+        <dd><time datetime="{{ .SentAt.Format "2006-01-02T15:04:05Z" }}">{{ .SentAt.Format "Jan 2, 2006 3:04 PM" }}</time></dd>
+        {{ end }}
+        {{ if .EscalateAfter }}
+        <dt>Escalate After</dt>
+        <dd><time datetime="{{ .EscalateAfter.Format "2006-01-02T15:04:05Z" }}">{{ .EscalateAfter.Format "Jan 2, 2006 3:04 PM" }}</time></dd>
+        {{ end }}
+        {{ if .ResponseNotes }}
+        <dt>Response Notes</dt>
+        <dd>{{ .ResponseNotes }}</dd>
+        {{ end }}
+      </dl>
+
+      {{ $replies := index $.RepliesByEmail .ID }}
+      {{ if $replies }}
+      <div class="replies">
+        <h4>Replies</h4>
+        {{ range $replies }}
+        <div class="reply-entry">
+          <p class="reply-meta">
+            From <strong>{{ .FromAddress }}</strong> on
+            <time datetime="{{ .CreatedAt.Format "2006-01-02T15:04:05Z" }}">{{ .CreatedAt.Format "Jan 2, 2006 3:04 PM" }}</time>
+          </p>
+          <pre class="reply-body">{{ .Body }}</pre>
+        </div>
+        {{ end }}
+      </div>
+      {{ end }}
+
+      {{ if eq (string .Status) "sent" }}
+      <div class="reply-actions">
+        <form method="post" action="/admin/emails/{{ .ID }}/reply-action" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+          <input type="hidden" name="action" value="resolve">
+          <input type="text" name="notes" placeholder="Resolution notes..." style="width:300px">
+          <button type="submit" class="btn btn-primary btn-sm"
+            onclick="return confirm('Mark this case as resolved?')">Resolve</button>
+        </form>
+        <form method="post" action="/admin/emails/{{ .ID }}/reply-action" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+          <input type="hidden" name="action" value="escalate_now">
+          <button type="submit" class="btn btn-danger btn-sm"
+            onclick="return confirm('Immediately escalate to upstream providers?')">Escalate Now</button>
+        </form>
+        {{ if .ResponseNotes }}
+        <form method="post" action="/admin/emails/{{ .ID }}/reply-action" style="display:inline">
+          <input type="hidden" name="csrf_token" value="{{ $.CSRFToken }}">
+          <input type="hidden" name="action" value="ignore_autoreply">
+          <button type="submit" class="btn btn-secondary btn-sm"
+            onclick="return confirm('Ignore auto-reply and resume escalation timer?')">Ignore Auto-Reply</button>
+        </form>
+        {{ end }}
+      </div>
+      {{ end }}
+    </div>
+    {{ end }}
+  </section>
+  {{ end }}
+
   {{ if eq (string .Report.Status) "cloudflare_pending" }}
   <section class="detail-section">
     <h2>Cloudflare Origin IP</h2>

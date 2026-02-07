@@ -14,6 +14,7 @@ import (
 	"time"
 
 	wizard "github.com/endharassment/reporting-wizard"
+	"github.com/endharassment/reporting-wizard/internal/boilerplate"
 	"github.com/endharassment/reporting-wizard/internal/email"
 	"github.com/endharassment/reporting-wizard/internal/escalation"
 	"github.com/endharassment/reporting-wizard/internal/infra"
@@ -84,6 +85,10 @@ func main() {
 	// a local Tor SOCKS proxy is available).
 	srv.SetSnapshotter(snapshot.NewPlainHTTPSnapshotter())
 
+	// Initialize domain boilerplate database.
+	boilerplateDB := boilerplate.NewDB()
+	srv.SetBoilerplate(boilerplateDB)
+
 	// Start escalation engine.
 	logger := slog.Default()
 	abuseContactLookup := &infra.RDAPAbuseContactLookup{
@@ -91,6 +96,8 @@ func main() {
 		ASN:  infra.NewASNClient(),
 	}
 	escalationEngine := escalation.NewEngine(db, abuseContactLookup, cfg.EscalationDays, logger)
+	escalationEngine.SetBoilerplate(boilerplateDB)
+	srv.SetEscalator(escalationEngine)
 	go func() {
 		if err := escalationEngine.Run(ctx); err != nil && err != context.Canceled {
 			log.Printf("ERROR: escalation engine: %v", err)

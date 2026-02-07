@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/endharassment/reporting-wizard/internal/admin"
+	"github.com/endharassment/reporting-wizard/internal/boilerplate"
 	"github.com/endharassment/reporting-wizard/internal/infra"
 	"github.com/endharassment/reporting-wizard/internal/report"
 	"github.com/endharassment/reporting-wizard/internal/store"
@@ -52,6 +53,7 @@ type Server struct {
 	router      chi.Router
 	staticFS    fs.FS
 	snapshotter Snapshotter
+	escalator   admin.Escalator
 }
 
 // NewServer creates a new Server from the given config, store, and filesystem assets.
@@ -168,6 +170,9 @@ func (s *Server) routes() chi.Router {
 			UserFromContext,
 			func(ctx context.Context) string { return CSRFTokenFromContext(ctx) },
 		)
+		if s.escalator != nil {
+			ah.SetEscalator(s.escalator)
+		}
 
 		r.Get("/admin", ah.HandleDashboard)
 		r.Get("/admin/queue", ah.HandleQueue)
@@ -179,6 +184,7 @@ func (s *Server) routes() chi.Router {
 		r.Get("/admin/emails/{emailID}", ah.HandleEmailPreview)
 		r.Post("/admin/emails/{emailID}/approve", ah.HandleEmailApprove)
 		r.Post("/admin/emails/{emailID}/reject", ah.HandleEmailReject)
+		r.Post("/admin/emails/{emailID}/reply-action", ah.HandleReplyAction)
 		r.Get("/admin/evidence/{evidenceID}", ah.HandleAdminEvidenceDownload)
 		r.Get("/admin/users", ah.HandleListUsers)
 		r.Post("/admin/users/{userID}/ban", ah.HandleBanUser)
@@ -196,6 +202,16 @@ func (s *Server) Handler() http.Handler {
 // SetSnapshotter configures the URL snapshotter for text-only URL crawling.
 func (s *Server) SetSnapshotter(snap Snapshotter) {
 	s.snapshotter = snap
+}
+
+// SetBoilerplate configures the domain boilerplate database for email composition.
+func (s *Server) SetBoilerplate(db *boilerplate.DB) {
+	s.emailCfg.Boilerplate = db
+}
+
+// SetEscalator configures the escalation engine for admin immediate-escalation actions.
+func (s *Server) SetEscalator(e admin.Escalator) {
+	s.escalator = e
 }
 
 // Stop cleans up server resources.
