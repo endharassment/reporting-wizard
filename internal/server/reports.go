@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/endharassment/reporting-wizard/internal/model"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -43,11 +44,25 @@ func (s *Server) HandleReportDetail(w http.ResponseWriter, r *http.Request) {
 	auditLog, _ := s.store.ListAuditLogByTarget(r.Context(), reportID)
 	snapshots, _ := s.store.ListURLSnapshotsByReport(r.Context(), reportID)
 
+	type EmailWithReplies struct {
+		*model.OutgoingEmail
+		Replies []*model.EmailReply
+	}
+	emailsWithReplies := []EmailWithReplies{}
+	for _, email := range emails {
+		replies, _ := s.store.ListEmailRepliesByEmail(r.Context(), email.ID)
+		emailsWithReplies = append(emailsWithReplies, EmailWithReplies{
+			OutgoingEmail: email,
+			Replies:       replies,
+		})
+	}
+
 	s.render(w, r, "detail.html", map[string]interface{}{
 		"Report":    rpt,
 		"Evidence":  evidence,
-		"Emails":    emails,
+		"Emails":    emailsWithReplies,
 		"Timeline":  auditLog,
 		"Snapshots": snapshots,
 	})
 }
+

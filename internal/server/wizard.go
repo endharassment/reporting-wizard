@@ -440,7 +440,6 @@ func (s *Server) HandleWizardStep4Submit(w http.ResponseWriter, r *http.Request)
 			log.Printf("ERROR: compose email: %v", err)
 			continue
 		}
-		outgoing.ID = uuid.New().String()
 		if err := s.store.CreateOutgoingEmail(r.Context(), outgoing); err != nil {
 			log.Printf("ERROR: create outgoing email: %v", err)
 		}
@@ -450,7 +449,6 @@ func (s *Server) HandleWizardStep4Submit(w http.ResponseWriter, r *http.Request)
 	if len(contactMap) == 0 && len(infraResults) > 0 {
 		outgoing, err := report.ComposeEmail(s.emailCfg, rpt, infraResults, evidence, nil)
 		if err == nil {
-			outgoing.ID = uuid.New().String()
 			_ = s.store.CreateOutgoingEmail(r.Context(), outgoing)
 		}
 	}

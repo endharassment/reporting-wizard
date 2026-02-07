@@ -88,6 +88,22 @@
     </div>
   </section>
 
+  <section class="detail-section">
+    <h2>Send Email to User</h2>
+    <form method="post" action="/admin/reports/{{ .Report.ID }}/send-email">
+      <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+      <div class="form-group">
+        <label for="subject">Subject</label>
+        <input type="text" id="subject" name="subject" required>
+      </div>
+      <div class="form-group">
+        <label for="message">Message</label>
+        <textarea id="message" name="message" rows="5" required></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary">Send Email</button>
+    </form>
+  </section>
+
   {{ if .AuditLog }}
   <section class="detail-section">
     <h2>Audit Log</h2>

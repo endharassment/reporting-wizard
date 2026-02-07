@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/endharassment/reporting-wizard/internal/infra"
@@ -361,6 +362,99 @@ func (h *AdminHandler) HandleAdminEvidenceDownload(w http.ResponseWriter, r *htt
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filepath.Base(ev.Filename)))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, r, ev.Filename, ev.CreatedAt, f)
+}
+
+// HandleListUsers renders the user management page.
+func (h *AdminHandler) HandleListUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := h.store.ListUsers(r.Context())
+	if err != nil {
+		log.Printf("ERROR: list users: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+	h.render(w, r, "users.html", map[string]interface{}{
+		"Users": users,
+	})
+}
+
+// HandleBanUser bans a user.
+func (h *AdminHandler) HandleBanUser(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "userID")
+	adminUser := h.getUser(r.Context())
+
+	if err := h.store.BanUser(r.Context(), userID); err != nil {
+		log.Printf("ERROR: ban user: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	h.createAuditEntry(r, adminUser.ID, "user_banned", userID, fmt.Sprintf("User %s banned", userID))
+
+	http.Redirect(w, r, "/admin/users", http.StatusFound)
+}
+
+// HandleReportAbuse reports a user to their identity provider.
+func (h *AdminHandler) HandleReportAbuse(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "userID")
+	adminUser := h.getUser(r.Context())
+
+	user, err := h.store.GetUser(r.Context(), userID)
+	if err != nil {
+		log.Printf("ERROR: get user: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	provider := "unknown"
+	reportURL := ""
+	if user.GoogleRefreshToken != "" {
+		provider = "Google"
+		reportURL = "https://support.google.com/mail/answer/8253"
+	} else if strings.Contains(user.Email, "@") {
+		// Basic check if email contains '@', could be GitHub or other
+		provider = "the user's email provider"
+		reportURL = "about:blank" // Placeholder
+	}
+
+	h.createAuditEntry(r, adminUser.ID, "user_abuse_report_generated", userID, fmt.Sprintf("Generated abuse report for user %s to %s", user.ID, provider))
+
+	h.render(w, r, "report_abuse.html", map[string]interface{}{
+		"ReportedUser": user,
+		"Provider":     provider,
+		"ReportURL":    reportURL,
+	})
+}
+
+
+// HandleSendEmailToUser sends a custom email to the user who filed the report.
+func (h *AdminHandler) HandleSendEmailToUser(w http.ResponseWriter, r *http.Request) {
+	reportID := chi.URLParam(r, "reportID")
+	adminUser := h.getUser(r.Context())
+	subject := r.FormValue("subject")
+	message := r.FormValue("message")
+
+	rpt, err := h.store.GetReport(r.Context(), reportID)
+	if err != nil {
+		http.Error(w, "Report not found", http.StatusNotFound)
+		return
+	}
+
+	user, err := h.store.GetUser(r.Context(), rpt.UserID)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	if err := report.SendEmailToUser(h.emailCfg, user.Email, subject, message); err != nil {
+		log.Printf("ERROR: send email to user: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	details := fmt.Sprintf("Sent email to user %s with subject: %s", user.Email, subject)
+	h.createAuditEntry(r, adminUser.ID, "sent_user_email", reportID, details)
+
+	http.Redirect(w, r, fmt.Sprintf("/admin/reports/%s", reportID), http.StatusFound)
 }
 
 // --- Helpers ---

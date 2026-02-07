@@ -48,14 +48,15 @@ const (
 
 // User represents a reporter or admin.
 type User struct {
-	ID                string
-	Email             string
-	Name              string
-	IsAdmin           bool
-	GoogleAccessToken string
+	ID                 string
+	Email              string
+	Name               string
+	IsAdmin            bool
+	Banned             bool
+	GoogleAccessToken  string
 	GoogleRefreshToken string
-	GoogleTokenExpiry time.Time
-	CreatedAt         time.Time
+	GoogleTokenExpiry  time.Time
+	CreatedAt          time.Time
 }
 
 // Session represents an authenticated session.
@@ -159,4 +160,13 @@ type AuditLogEntry struct {
 	TargetID  string
 	Details   string
 	CreatedAt time.Time
+}
+
+// EmailReply represents a reply to an outgoing email.
+type EmailReply struct {
+	ID              string
+	OutgoingEmailID string
+	FromAddress     string
+	Body            string
+	CreatedAt       time.Time
 }

@@ -84,10 +84,10 @@ func (m *mockStore) GetUser(context.Context, string) (*model.User, error) { pani
 func (m *mockStore) GetUserByEmail(context.Context, string) (*model.User, error) {
 	panic("not implemented")
 }
-func (m *mockStore) UpdateUser(context.Context, *model.User) error { panic("not implemented") }
-func (m *mockStore) CreateSession(context.Context, *model.Session) error {
-	panic("not implemented")
-}
+func (m *mockStore) UpdateUser(context.Context, *model.User) error      { panic("not implemented") }
+func (m *mockStore) ListUsers(context.Context) ([]*model.User, error)    { panic("not implemented") }
+func (m *mockStore) BanUser(context.Context, string) error               { panic("not implemented") }
+func (m *mockStore) CreateSession(context.Context, *model.Session) error { panic("not implemented") }
 func (m *mockStore) GetSession(context.Context, string) (*model.Session, error) {
 	panic("not implemented")
 }
@@ -142,6 +142,12 @@ func (m *mockStore) CreateURLSnapshot(context.Context, *model.URLSnapshot) error
 	panic("not implemented")
 }
 func (m *mockStore) ListURLSnapshotsByReport(context.Context, string) ([]*model.URLSnapshot, error) {
+	panic("not implemented")
+}
+func (m *mockStore) CreateEmailReply(context.Context, *model.EmailReply) error {
+	panic("not implemented")
+}
+func (m *mockStore) ListEmailRepliesByEmail(context.Context, string) ([]*model.EmailReply, error) {
 	panic("not implemented")
 }
 

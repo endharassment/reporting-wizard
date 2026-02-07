@@ -1,0 +1,42 @@
+{{template "layout.html" .}}
+
+{{define "title"}}User Management{{end}}
+
+{{define "content"}}
+<div class="container">
+    <h1>User Management</h1>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Email</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Users}}
+            <tr>
+                <td>{{.Email}}</td>
+                <td>{{.Name}}</td>
+                <td>{{if .Banned}}Banned{{else}}Active{{end}}</td>
+                <td>
+                    {{if .Banned}}
+                    <form action="/admin/users/{{.ID}}/report-abuse" method="post" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                        <button type="submit" class="button-small button-danger">Report to Provider</button>
+                    </form>
+                    {{else}}
+                    <form action="/admin/users/{{.ID}}/ban" method="post" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                        <button type="submit" class="button-small button-danger">Ban</button>
+                    </form>
+                    {{end}}
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

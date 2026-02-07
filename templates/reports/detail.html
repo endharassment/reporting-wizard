@@ -107,6 +107,21 @@
               {{ end }}
             </td>
           </tr>
+          {{ if .Replies }}
+          <tr class="email-replies">
+              <td colspan="4">
+                  <strong>Replies:</strong>
+                  <ul>
+                      {{ range .Replies }}
+                      <li>
+                          <strong>From:</strong> {{ .FromAddress }}<br>
+                          <pre>{{ .Body }}</pre>
+                      </li>
+                      {{ end }}
+                  </ul>
+              </td>
+          </tr>
+          {{ end }}
           {{ end }}
         </tbody>
       </table>

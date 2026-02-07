@@ -1,0 +1,31 @@
+{{template "layout.html" .}}
+
+{{define "title"}}Report User for Abuse{{end}}
+
+{{define "content"}}
+<div class="container">
+    <h1>Report User for Abuse</h1>
+
+    <p>Please manually report the following user for abuse of the platform:</p>
+
+    <ul>
+        <li><strong>User ID:</strong> {{.ReportedUser.ID}}</li>
+        <li><strong>Email:</strong> {{.ReportedUser.Email}}</li>
+        <li><strong>Name:</strong> {{.ReportedUser.Name}}</li>
+    </ul>
+
+    <p>
+        The user authenticated via <strong>{{.Provider}}</strong>. Please use the following link to report the user for abuse:
+    </p>
+
+    <p>
+        <a href="{{.ReportURL}}" target="_blank" rel="noopener noreferrer" class="button">{{.ReportURL}}</a>
+    </p>
+
+    <p>
+        When filing the report, please include the user's ID and email address, and explain that they have been banned from our platform for submitting harassing or otherwise abusive reports.
+    </p>
+
+    <a href="/admin/users" class="button">Back to User Management</a>
+</div>
+{{end}}

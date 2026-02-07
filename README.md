@@ -1,4 +1,4 @@
-# End Harassment Reporting Wizard
+# End Network Harassment Inc Reporting Wizard
 
 A Go web application that automates filing abuse reports with hosting providers
 on behalf of individuals targeted by online harassment, hate speech, doxxing,
@@ -60,7 +60,7 @@ All configuration is via environment variables (with flag overrides for some):
 | `WIZARD_GITHUB_SECRET` | No | -- | GitHub OAuth client secret |
 | `WIZARD_SENDGRID_KEY` | Yes | -- | SendGrid API key for outgoing emails |
 | `WIZARD_FROM_EMAIL` | No | `reports@endharassment.net` | Sender email address |
-| `WIZARD_FROM_NAME` | No | `End Harassment` | Sender display name |
+| `WIZARD_FROM_NAME` | No | `End Network Harassment Inc` | Sender display name |
 
 ### Google OAuth Setup
 

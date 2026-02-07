@@ -236,7 +236,7 @@ func composeEscalationBody(report *model.Report, original *model.OutgoingEmail, 
 	b.WriteString("The original machine-readable X-ARF v4 report is attached to this email.\n\n")
 	b.WriteString("We request that you investigate this matter and take appropriate action.\n\n")
 	b.WriteString("Regards,\n")
-	b.WriteString("End Harassment Reporting Wizard\n")
+	b.WriteString("End Network Harassment Inc Reporting Wizard\n")
 
 	return b.String()
 }

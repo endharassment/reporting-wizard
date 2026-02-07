@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/endharassment/reporting-wizard/internal/model"
+	"github.com/google/uuid"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
@@ -41,11 +42,13 @@ func ComposeEmail(cfg EmailConfig, report *model.Report, infraResults []*model.I
 		targetASN = infraResults[0].ASN
 	}
 
-	subject := fmt.Sprintf("Abuse Report: %s violation on %s", violationLabel(report.ViolationType), report.Domain)
+	emailID := uuid.New().String()
+	subject := fmt.Sprintf("Abuse Report: %s violation on %s [Ticket: %s]", violationLabel(report.ViolationType), report.Domain, emailID)
 
 	body := composeBody(cfg, report, infraResults, evidence)
 
 	return &model.OutgoingEmail{
+		ID:           emailID,
 		ReportID:     report.ID,
 		Recipient:    recipient,
 		RecipientOrg: recipientOrg,
@@ -190,4 +193,27 @@ func SendEmail(sender SendGridSender, cfg EmailConfig, outgoing *model.OutgoingE
 	}
 
 	return sender.Send(message)
+}
+
+// SendEmailToUser sends a simple email to a user.
+func SendEmailToUser(cfg EmailConfig, recipient, subject, body string) error {
+	from := mail.NewEmail(cfg.FromName, cfg.FromAddress)
+	to := mail.NewEmail("", recipient)
+	message := mail.NewSingleEmail(from, subject, to, body, "")
+
+	if cfg.SandboxMode {
+		settings := mail.NewMailSettings()
+		settings.SetSandboxMode(mail.NewSetting(true))
+		message.SetMailSettings(settings)
+	}
+
+	client := sendgrid.NewSendClient(cfg.SendGridAPIKey)
+	resp, err := client.Send(message)
+	if err != nil {
+		return fmt.Errorf("sendgrid send: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("sendgrid returned status %d: %s", resp.StatusCode, resp.Body)
+	}
+	return nil
 }

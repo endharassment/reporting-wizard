@@ -14,6 +14,8 @@ type Store interface {
 	GetUser(ctx context.Context, id string) (*model.User, error)
 	GetUserByEmail(ctx context.Context, email string) (*model.User, error)
 	UpdateUser(ctx context.Context, user *model.User) error
+	ListUsers(ctx context.Context) ([]*model.User, error)
+	BanUser(ctx context.Context, id string) error
 
 	// Sessions
 	CreateSession(ctx context.Context, session *model.Session) error
@@ -54,4 +56,8 @@ type Store interface {
 	// Audit Log
 	CreateAuditLogEntry(ctx context.Context, entry *model.AuditLogEntry) error
 	ListAuditLogByTarget(ctx context.Context, targetID string) ([]*model.AuditLogEntry, error)
+
+	// Email Replies
+	CreateEmailReply(ctx context.Context, reply *model.EmailReply) error
+	ListEmailRepliesByEmail(ctx context.Context, emailID string) ([]*model.EmailReply, error)
 }

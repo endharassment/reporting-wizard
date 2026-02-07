@@ -68,25 +68,16 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 
 // --- Users ---
 
-func (s *SQLiteStore) CreateUser(ctx context.Context, user *model.User) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO users (id, email, name, is_admin, google_access_token, google_refresh_token, google_token_expiry, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		user.ID, user.Email, user.Name, boolToInt(user.IsAdmin),
-		user.GoogleAccessToken, user.GoogleRefreshToken, nullTimeVal(user.GoogleTokenExpiry),
-		user.CreatedAt.UTC().Format(timeFormat))
-	return err
-}
-
 func (s *SQLiteStore) GetUser(ctx context.Context, id string) (*model.User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, email, name, is_admin, google_access_token, google_refresh_token, google_token_expiry, created_at FROM users WHERE id = ?`, id))
+		`SELECT id, email, name, is_admin, banned, google_access_token, google_refresh_token, google_token_expiry, created_at FROM users WHERE id = ?`, id))
 }
 
 func (s *SQLiteStore) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, email, name, is_admin, google_access_token, google_refresh_token, google_token_expiry, created_at FROM users WHERE email = ?`, email))
+		`SELECT id, email, name, is_admin, banned, google_access_token, google_refresh_token, google_token_expiry, created_at FROM users WHERE email = ?`, email))
 }
+
 
 func (s *SQLiteStore) UpdateUser(ctx context.Context, user *model.User) error {
 	_, err := s.db.ExecContext(ctx,
@@ -97,16 +88,55 @@ func (s *SQLiteStore) UpdateUser(ctx context.Context, user *model.User) error {
 	return err
 }
 
-func (s *SQLiteStore) scanUser(row *sql.Row) (*model.User, error) {
+func (s *SQLiteStore) BanUser(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET banned = 1 WHERE id = ?`, id)
+	return err
+}
+
+func (s *SQLiteStore) ListUsers(ctx context.Context) ([]*model.User, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, email, name, is_admin, banned, google_access_token, google_refresh_token, google_token_expiry, created_at FROM users ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*model.User
+	for rows.Next() {
+		u, err := s.scanUser(rows)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
+type scannable interface {
+	Scan(dest ...interface{}) error
+}
+
+
+func (s *SQLiteStore) CreateUser(ctx context.Context, user *model.User) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO users (id, email, name, is_admin, banned, google_access_token, google_refresh_token, google_token_expiry, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		user.ID, user.Email, user.Name, boolToInt(user.IsAdmin), boolToInt(user.Banned),
+		user.GoogleAccessToken, user.GoogleRefreshToken, nullTimeVal(user.GoogleTokenExpiry),
+		user.CreatedAt.UTC().Format(timeFormat))
+	return err
+}
+
+func (s *SQLiteStore) scanUser(row scannable) (*model.User, error) {
 	var u model.User
-	var isAdmin int
+	var isAdmin, banned int
 	var createdAt, tokenExpiry string
-	err := row.Scan(&u.ID, &u.Email, &u.Name, &isAdmin,
+	err := row.Scan(&u.ID, &u.Email, &u.Name, &isAdmin, &banned,
 		&u.GoogleAccessToken, &u.GoogleRefreshToken, &tokenExpiry, &createdAt)
 	if err != nil {
 		return nil, err
 	}
 	u.IsAdmin = isAdmin != 0
+	u.Banned = banned != 0
 	u.CreatedAt, _ = time.Parse(timeFormat, createdAt)
 	if tokenExpiry != "" {
 		u.GoogleTokenExpiry, _ = time.Parse(timeFormat, tokenExpiry)
@@ -566,6 +596,40 @@ func (s *SQLiteStore) ListAuditLogByTarget(ctx context.Context, targetID string)
 		entries = append(entries, &e)
 	}
 	return entries, rows.Err()
+}
+
+// --- Email Replies ---
+
+func (s *SQLiteStore) CreateEmailReply(ctx context.Context, reply *model.EmailReply) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO email_replies (id, outgoing_email_id, from_address, body, created_at)
+		 VALUES (?, ?, ?, ?, ?)`,
+		reply.ID, reply.OutgoingEmailID, reply.FromAddress, reply.Body,
+		reply.CreatedAt.UTC().Format(timeFormat))
+	return err
+}
+
+func (s *SQLiteStore) ListEmailRepliesByEmail(ctx context.Context, emailID string) ([]*model.EmailReply, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, outgoing_email_id, from_address, body, created_at
+		 FROM email_replies WHERE outgoing_email_id = ? ORDER BY created_at`, emailID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var replies []*model.EmailReply
+	for rows.Next() {
+		var r model.EmailReply
+		var createdAt string
+		err := rows.Scan(&r.ID, &r.OutgoingEmailID, &r.FromAddress, &r.Body, &createdAt)
+		if err != nil {
+			return nil, err
+		}
+		r.CreatedAt, _ = time.Parse(timeFormat, createdAt)
+		replies = append(replies, &r)
+	}
+	return replies, rows.Err()
 }
 
 // --- Helpers ---
