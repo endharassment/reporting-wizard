@@ -48,11 +48,14 @@ const (
 
 // User represents a reporter or admin.
 type User struct {
-	ID        string
-	Email     string
-	Name      string
-	IsAdmin   bool
-	CreatedAt time.Time
+	ID                string
+	Email             string
+	Name              string
+	IsAdmin           bool
+	GoogleAccessToken string
+	GoogleRefreshToken string
+	GoogleTokenExpiry time.Time
+	CreatedAt         time.Time
 }
 
 // Session represents an authenticated session.
@@ -106,7 +109,13 @@ type Evidence struct {
 	SizeBytes   int64  // 0 for URL-only evidence
 	EvidenceURL string // URL to cloud-hosted evidence (primary method)
 	Description string
-	CreatedAt   time.Time
+	// Google Drive metadata (populated when evidence URL is a Drive link).
+	DriveFileID   string
+	DriveFileName string
+	DriveMimeType string
+	DriveSize     int64
+	DriveVerified bool
+	CreatedAt     time.Time
 }
 
 // URLSnapshot represents a text-only crawl of a reported URL.

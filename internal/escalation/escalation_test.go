@@ -114,6 +114,9 @@ func (m *mockStore) DeleteInfraResultsByReport(context.Context, string) error {
 func (m *mockStore) CreateEvidence(context.Context, *model.Evidence) error {
 	panic("not implemented")
 }
+func (m *mockStore) UpdateEvidence(context.Context, *model.Evidence) error {
+	panic("not implemented")
+}
 func (m *mockStore) GetEvidence(context.Context, string) (*model.Evidence, error) {
 	panic("not implemented")
 }

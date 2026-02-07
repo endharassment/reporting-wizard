@@ -35,6 +35,7 @@ type Store interface {
 
 	// Evidence
 	CreateEvidence(ctx context.Context, evidence *model.Evidence) error
+	UpdateEvidence(ctx context.Context, evidence *model.Evidence) error
 	GetEvidence(ctx context.Context, id string) (*model.Evidence, error)
 	ListEvidenceByReport(ctx context.Context, reportID string) ([]*model.Evidence, error)
 

@@ -124,7 +124,7 @@ func (s *Server) googleOAuthConfig() *oauth2.Config {
 			TokenURL: "https://oauth2.googleapis.com/token",
 		},
 		RedirectURL: s.config.BaseURL + "/auth/google/callback",
-		Scopes:      []string{"openid", "email", "profile"},
+		Scopes:      []string{"openid", "email", "profile", "https://www.googleapis.com/auth/drive.metadata.readonly"},
 	}
 }
 
@@ -144,7 +144,10 @@ func (s *Server) HandleGoogleLogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		Secure:   strings.HasPrefix(s.config.BaseURL, "https"),
 	})
-	url := s.googleOAuthConfig().AuthCodeURL(state)
+	url := s.googleOAuthConfig().AuthCodeURL(state,
+		oauth2.AccessTypeOffline,
+		oauth2.SetAuthURLParam("prompt", "consent"),
+	)
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
@@ -187,6 +190,17 @@ func (s *Server) HandleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		log.Printf("ERROR: get or create user: %v", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
+	}
+
+	// Persist Google OAuth tokens for Drive API access.
+	user.GoogleAccessToken = token.AccessToken
+	if token.RefreshToken != "" {
+		user.GoogleRefreshToken = token.RefreshToken
+	}
+	user.GoogleTokenExpiry = token.Expiry
+	if err := s.store.UpdateUser(r.Context(), user); err != nil {
+		log.Printf("ERROR: update user google tokens: %v", err)
+		// Non-fatal — user can still authenticate, just won't have Drive verification.
 	}
 
 	if err := s.createSession(w, r, user.ID); err != nil {

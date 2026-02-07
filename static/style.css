@@ -339,6 +339,16 @@ tbody tr:hover {
   color: #9b2c2c;
 }
 
+.badge-verified {
+  background: #c6f6d5;
+  color: #276749;
+}
+
+.badge-unverified {
+  background: #fefcbf;
+  color: #975a16;
+}
+
 /* === Step Indicator === */
 .step-indicator {
   display: flex;

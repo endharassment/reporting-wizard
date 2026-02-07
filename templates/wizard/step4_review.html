@@ -45,6 +45,12 @@
       <li>
         {{ if .EvidenceURL }}
         <a href="{{ .EvidenceURL }}" target="_blank" rel="noopener noreferrer">{{ .EvidenceURL }}</a>
+        {{ if .DriveVerified }}
+        <span class="badge badge-verified" title="Verified via Google Drive API">Verified</span>
+        <br><span class="evidence-meta">{{ .DriveFileName }} &middot; {{ .DriveMimeType }}{{ if .DriveSize }} &middot; {{ .DriveSize }} bytes{{ end }}</span>
+        {{ else if .DriveFileID }}
+        <span class="badge badge-unverified" title="Google Drive link detected but metadata could not be verified">Unverified</span>
+        {{ end }}
         {{ else }}
         <span>{{ .Filename }} ({{ .ContentType }}, SHA-256: <code class="hash">{{ .SHA256 }}</code>)</span>
         {{ end }}

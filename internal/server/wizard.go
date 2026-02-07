@@ -8,11 +8,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/endharassment/reporting-wizard/internal/gdrive"
 	"github.com/endharassment/reporting-wizard/internal/infra"
 	"github.com/endharassment/reporting-wizard/internal/model"
 	"github.com/endharassment/reporting-wizard/internal/report"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"golang.org/x/oauth2"
 )
 
 // HandleWizardStep1 renders the URL entry form.
@@ -282,6 +284,7 @@ func (s *Server) HandleWizardStep3Submit(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Store each evidence URL as an evidence record.
+	// For Google Drive URLs, attempt metadata verification.
 	now := time.Now().UTC()
 	for _, u := range evidenceURLs {
 		ev := &model.Evidence{
@@ -291,6 +294,48 @@ func (s *Server) HandleWizardStep3Submit(w http.ResponseWriter, r *http.Request)
 			Description: "User-provided evidence link",
 			CreatedAt:   now,
 		}
+
+		// If this is a Google Drive URL, try to verify and pull metadata.
+		if fileID := gdrive.ExtractFileID(u); fileID != "" {
+			ev.DriveFileID = fileID
+			ev.Description = "Google Drive evidence link"
+
+			if user.GoogleAccessToken != "" {
+				token := &oauth2.Token{
+					AccessToken:  user.GoogleAccessToken,
+					RefreshToken: user.GoogleRefreshToken,
+					Expiry:       user.GoogleTokenExpiry,
+				}
+
+				// Refresh token if needed.
+				cfg := s.googleOAuthConfig()
+				refreshed, err := gdrive.RefreshTokenIfNeeded(r.Context(), cfg, token)
+				if err != nil {
+					log.Printf("WARN: refresh google token for user %s: %v", user.ID, err)
+				} else {
+					if refreshed.AccessToken != token.AccessToken {
+						user.GoogleAccessToken = refreshed.AccessToken
+						user.GoogleTokenExpiry = refreshed.Expiry
+						if refreshed.RefreshToken != "" {
+							user.GoogleRefreshToken = refreshed.RefreshToken
+						}
+						_ = s.store.UpdateUser(r.Context(), user)
+					}
+					token = refreshed
+
+					meta, err := gdrive.GetFileMeta(r.Context(), token, fileID)
+					if err != nil {
+						log.Printf("WARN: drive metadata for %s: %v", fileID, err)
+					} else {
+						ev.DriveFileName = meta.Name
+						ev.DriveMimeType = meta.MimeType
+						ev.DriveSize = meta.Size
+						ev.DriveVerified = true
+					}
+				}
+			}
+		}
+
 		if err := s.store.CreateEvidence(r.Context(), ev); err != nil {
 			log.Printf("ERROR: store evidence URL: %v", err)
 		}

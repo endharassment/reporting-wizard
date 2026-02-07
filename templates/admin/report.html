@@ -32,7 +32,13 @@
       <li class="evidence-item">
         {{ if .EvidenceURL }}
         <a href="{{ .EvidenceURL }}" target="_blank" rel="noopener noreferrer">{{ .EvidenceURL }}</a>
-        {{ if .Description }}<span class="evidence-meta">{{ .Description }}</span>{{ end }}
+        {{ if .DriveVerified }}
+        <span class="badge badge-verified" title="Verified via Google Drive API">Verified</span>
+        <br><span class="evidence-meta">{{ .DriveFileName }} &middot; {{ .DriveMimeType }}{{ if .DriveSize }} &middot; {{ .DriveSize }} bytes{{ end }}</span>
+        {{ else if .DriveFileID }}
+        <span class="badge badge-unverified" title="Google Drive link not verified — user may not have granted Drive scope">Unverified</span>
+        {{ end }}
+        {{ if and .Description (not .DriveVerified) }}<span class="evidence-meta">{{ .Description }}</span>{{ end }}
         {{ else }}
         <span class="evidence-filename">{{ .Filename }}</span>
         <span class="evidence-meta">{{ .ContentType }} &middot; {{ .SizeBytes }} bytes &middot; SHA-256: <code class="hash">{{ .SHA256 }}</code></span>

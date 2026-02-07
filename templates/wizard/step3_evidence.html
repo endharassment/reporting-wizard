@@ -50,7 +50,7 @@
       <textarea id="evidence_urls" name="evidence_urls" rows="4"
         placeholder="https://drive.google.com/file/d/.../view?usp=sharing&#10;https://www.dropbox.com/s/.../screenshot.png?dl=0"
         aria-describedby="evidence-help">{{ .EvidenceURLs }}</textarea>
-      <small id="evidence-help" class="form-help">Upload your screenshots and evidence files to your own cloud storage (Google Drive, Dropbox, iCloud, OneDrive, etc.) and paste the share links here. Make sure the links are publicly accessible or set to "anyone with the link can view."</small>
+      <small id="evidence-help" class="form-help">Upload your screenshots and evidence files to your own cloud storage and paste the share links here. <strong>Google Drive links are recommended</strong> &mdash; if you signed in with Google, we can automatically verify that the files exist and pull metadata (name, type, size). For other services (Dropbox, iCloud, OneDrive), make sure the links are set to "anyone with the link can view."</small>
       {{ if .Errors.EvidenceURLs }}
       <span class="form-error" role="alert">{{ .Errors.EvidenceURLs }}</span>
       {{ end }}
@@ -63,10 +63,16 @@
       <li>
         {{ if .EvidenceURL }}
         <a href="{{ .EvidenceURL }}" target="_blank" rel="noopener noreferrer" class="evidence-url">{{ .EvidenceURL }}</a>
+        {{ if .DriveVerified }}
+        <span class="badge badge-verified" title="Verified via Google Drive API">Verified</span>
+        <span class="evidence-meta">{{ .DriveFileName }} &middot; {{ .DriveMimeType }}{{ if .DriveSize }} &middot; {{ .DriveSize }} bytes{{ end }}</span>
+        {{ else if .DriveFileID }}
+        <span class="badge badge-unverified" title="Google Drive link detected but not verified">Unverified</span>
+        {{ end }}
         {{ else }}
         <span class="evidence-filename">{{ .Filename }}</span>
         {{ end }}
-        {{ if .Description }}
+        {{ if and .Description (not .DriveVerified) }}
         <span class="evidence-meta">{{ .Description }}</span>
         {{ end }}
       </li>

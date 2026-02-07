@@ -70,39 +70,55 @@ func (s *SQLiteStore) migrate(ctx context.Context) error {
 
 func (s *SQLiteStore) CreateUser(ctx context.Context, user *model.User) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO users (id, email, name, is_admin, created_at) VALUES (?, ?, ?, ?, ?)`,
-		user.ID, user.Email, user.Name, boolToInt(user.IsAdmin), user.CreatedAt.UTC().Format(timeFormat))
+		`INSERT INTO users (id, email, name, is_admin, google_access_token, google_refresh_token, google_token_expiry, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		user.ID, user.Email, user.Name, boolToInt(user.IsAdmin),
+		user.GoogleAccessToken, user.GoogleRefreshToken, nullTimeVal(user.GoogleTokenExpiry),
+		user.CreatedAt.UTC().Format(timeFormat))
 	return err
 }
 
 func (s *SQLiteStore) GetUser(ctx context.Context, id string) (*model.User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, email, name, is_admin, created_at FROM users WHERE id = ?`, id))
+		`SELECT id, email, name, is_admin, google_access_token, google_refresh_token, google_token_expiry, created_at FROM users WHERE id = ?`, id))
 }
 
 func (s *SQLiteStore) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
 	return s.scanUser(s.db.QueryRowContext(ctx,
-		`SELECT id, email, name, is_admin, created_at FROM users WHERE email = ?`, email))
+		`SELECT id, email, name, is_admin, google_access_token, google_refresh_token, google_token_expiry, created_at FROM users WHERE email = ?`, email))
 }
 
 func (s *SQLiteStore) UpdateUser(ctx context.Context, user *model.User) error {
 	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET email = ?, name = ?, is_admin = ? WHERE id = ?`,
-		user.Email, user.Name, boolToInt(user.IsAdmin), user.ID)
+		`UPDATE users SET email = ?, name = ?, is_admin = ?, google_access_token = ?, google_refresh_token = ?, google_token_expiry = ? WHERE id = ?`,
+		user.Email, user.Name, boolToInt(user.IsAdmin),
+		user.GoogleAccessToken, user.GoogleRefreshToken, nullTimeVal(user.GoogleTokenExpiry),
+		user.ID)
 	return err
 }
 
 func (s *SQLiteStore) scanUser(row *sql.Row) (*model.User, error) {
 	var u model.User
 	var isAdmin int
-	var createdAt string
-	err := row.Scan(&u.ID, &u.Email, &u.Name, &isAdmin, &createdAt)
+	var createdAt, tokenExpiry string
+	err := row.Scan(&u.ID, &u.Email, &u.Name, &isAdmin,
+		&u.GoogleAccessToken, &u.GoogleRefreshToken, &tokenExpiry, &createdAt)
 	if err != nil {
 		return nil, err
 	}
 	u.IsAdmin = isAdmin != 0
 	u.CreatedAt, _ = time.Parse(timeFormat, createdAt)
+	if tokenExpiry != "" {
+		u.GoogleTokenExpiry, _ = time.Parse(timeFormat, tokenExpiry)
+	}
 	return &u, nil
+}
+
+func nullTimeVal(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.UTC().Format(timeFormat)
 }
 
 // --- Sessions ---
@@ -290,31 +306,45 @@ func (s *SQLiteStore) DeleteInfraResultsByReport(ctx context.Context, reportID s
 
 func (s *SQLiteStore) CreateEvidence(ctx context.Context, ev *model.Evidence) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO evidence (id, report_id, filename, content_type, storage_path, sha256, size_bytes, evidence_url, description, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO evidence (id, report_id, filename, content_type, storage_path, sha256, size_bytes, evidence_url, description, drive_file_id, drive_file_name, drive_mime_type, drive_size, drive_verified, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		ev.ID, ev.ReportID, ev.Filename, ev.ContentType, ev.StoragePath,
-		ev.SHA256, ev.SizeBytes, ev.EvidenceURL, ev.Description, ev.CreatedAt.UTC().Format(timeFormat))
+		ev.SHA256, ev.SizeBytes, ev.EvidenceURL, ev.Description,
+		ev.DriveFileID, ev.DriveFileName, ev.DriveMimeType, ev.DriveSize, boolToInt(ev.DriveVerified),
+		ev.CreatedAt.UTC().Format(timeFormat))
+	return err
+}
+
+func (s *SQLiteStore) UpdateEvidence(ctx context.Context, ev *model.Evidence) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE evidence SET drive_file_id = ?, drive_file_name = ?, drive_mime_type = ?, drive_size = ?, drive_verified = ? WHERE id = ?`,
+		ev.DriveFileID, ev.DriveFileName, ev.DriveMimeType, ev.DriveSize, boolToInt(ev.DriveVerified), ev.ID)
 	return err
 }
 
 func (s *SQLiteStore) GetEvidence(ctx context.Context, id string) (*model.Evidence, error) {
 	var ev model.Evidence
 	var createdAt string
+	var driveVerified int
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, report_id, filename, content_type, storage_path, sha256, size_bytes, evidence_url, description, created_at
+		`SELECT id, report_id, filename, content_type, storage_path, sha256, size_bytes, evidence_url, description,
+		        drive_file_id, drive_file_name, drive_mime_type, drive_size, drive_verified, created_at
 		 FROM evidence WHERE id = ?`, id).
 		Scan(&ev.ID, &ev.ReportID, &ev.Filename, &ev.ContentType, &ev.StoragePath,
-			&ev.SHA256, &ev.SizeBytes, &ev.EvidenceURL, &ev.Description, &createdAt)
+			&ev.SHA256, &ev.SizeBytes, &ev.EvidenceURL, &ev.Description,
+			&ev.DriveFileID, &ev.DriveFileName, &ev.DriveMimeType, &ev.DriveSize, &driveVerified, &createdAt)
 	if err != nil {
 		return nil, err
 	}
+	ev.DriveVerified = driveVerified != 0
 	ev.CreatedAt, _ = time.Parse(timeFormat, createdAt)
 	return &ev, nil
 }
 
 func (s *SQLiteStore) ListEvidenceByReport(ctx context.Context, reportID string) ([]*model.Evidence, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, report_id, filename, content_type, storage_path, sha256, size_bytes, evidence_url, description, created_at
+		`SELECT id, report_id, filename, content_type, storage_path, sha256, size_bytes, evidence_url, description,
+		        drive_file_id, drive_file_name, drive_mime_type, drive_size, drive_verified, created_at
 		 FROM evidence WHERE report_id = ? ORDER BY created_at`, reportID)
 	if err != nil {
 		return nil, err
@@ -325,11 +355,14 @@ func (s *SQLiteStore) ListEvidenceByReport(ctx context.Context, reportID string)
 	for rows.Next() {
 		var ev model.Evidence
 		var createdAt string
+		var driveVerified int
 		err := rows.Scan(&ev.ID, &ev.ReportID, &ev.Filename, &ev.ContentType, &ev.StoragePath,
-			&ev.SHA256, &ev.SizeBytes, &ev.EvidenceURL, &ev.Description, &createdAt)
+			&ev.SHA256, &ev.SizeBytes, &ev.EvidenceURL, &ev.Description,
+			&ev.DriveFileID, &ev.DriveFileName, &ev.DriveMimeType, &ev.DriveSize, &driveVerified, &createdAt)
 		if err != nil {
 			return nil, err
 		}
+		ev.DriveVerified = driveVerified != 0
 		ev.CreatedAt, _ = time.Parse(timeFormat, createdAt)
 		results = append(results, &ev)
 	}
