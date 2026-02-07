@@ -1,0 +1,32 @@
+{{template "layout" .}}
+
+{{define "content"}}
+<div class="container">
+    <h1 class="title">Report Status</h1>
+    <div class="box">
+        <p><strong>Report ID:</strong> {{.Report.ID}}</p>
+        <p><strong>Domain:</strong> {{.Report.Domain}}</p>
+        <p><strong>Violation Type:</strong> {{.Report.ViolationType}}</p>
+        <p><strong>Status:</strong> <span class="tag is-info">{{.Report.Status}}</span></p>
+        <p><strong>Description:</strong></p>
+        <div class="content">
+            <p>{{.Report.Description}}</p>
+        </div>
+    </div>
+
+    <h2 class="subtitle">History</h2>
+    {{range .Emails}}
+    <div class="box">
+        <p><strong>Email to:</strong> {{.Recipient}}</p>
+        <p><strong>Sent at:</strong> {{.SentAt}}</p>
+        <p><strong>Status:</strong> <span class="tag is-light">{{.Status}}</span></p>
+        {{if .ResponseNotes}}
+        <p><strong>Response:</strong></p>
+        <div class="content">
+            <p>{{.ResponseNotes}}</p>
+        </div>
+        {{end}}
+    </div>
+    {{end}}
+</div>
+{{end}}

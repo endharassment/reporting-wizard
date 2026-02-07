@@ -175,6 +175,7 @@ func (s *Server) routes() chi.Router {
 		r.Post("/admin/reports/{reportID}/origin-ip", ah.HandleSetOriginIP)
 		r.Post("/admin/reports/{reportID}/approve", ah.HandleReportApprove)
 		r.Post("/admin/reports/{reportID}/reject", ah.HandleReportReject)
+		r.Post("/admin/reports/{reportID}/send-email", ah.HandleSendEmailToUser)
 		r.Get("/admin/emails/{emailID}", ah.HandleEmailPreview)
 		r.Post("/admin/emails/{emailID}/approve", ah.HandleEmailApprove)
 		r.Post("/admin/emails/{emailID}/reject", ah.HandleEmailReject)

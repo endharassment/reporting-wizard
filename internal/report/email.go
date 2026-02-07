@@ -194,3 +194,26 @@ func SendEmail(sender SendGridSender, cfg EmailConfig, outgoing *model.OutgoingE
 
 	return sender.Send(message)
 }
+
+// SendEmailToUser sends a simple email to a user.
+func SendEmailToUser(cfg EmailConfig, recipient, subject, body string) error {
+	from := mail.NewEmail(cfg.FromName, cfg.FromAddress)
+	to := mail.NewEmail("", recipient)
+	message := mail.NewSingleEmail(from, subject, to, body, "")
+
+	if cfg.SandboxMode {
+		settings := mail.NewMailSettings()
+		settings.SetSandboxMode(mail.NewSetting(true))
+		message.SetMailSettings(settings)
+	}
+
+	client := sendgrid.NewSendClient(cfg.SendGridAPIKey)
+	resp, err := client.Send(message)
+	if err != nil {
+		return fmt.Errorf("sendgrid send: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("sendgrid returned status %d: %s", resp.StatusCode, resp.Body)
+	}
+	return nil
+}

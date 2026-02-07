@@ -425,6 +425,38 @@ func (h *AdminHandler) HandleReportAbuse(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+
+// HandleSendEmailToUser sends a custom email to the user who filed the report.
+func (h *AdminHandler) HandleSendEmailToUser(w http.ResponseWriter, r *http.Request) {
+	reportID := chi.URLParam(r, "reportID")
+	adminUser := h.getUser(r.Context())
+	subject := r.FormValue("subject")
+	message := r.FormValue("message")
+
+	rpt, err := h.store.GetReport(r.Context(), reportID)
+	if err != nil {
+		http.Error(w, "Report not found", http.StatusNotFound)
+		return
+	}
+
+	user, err := h.store.GetUser(r.Context(), rpt.UserID)
+	if err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
+		return
+	}
+
+	if err := report.SendEmailToUser(h.emailCfg, user.Email, subject, message); err != nil {
+		log.Printf("ERROR: send email to user: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	details := fmt.Sprintf("Sent email to user %s with subject: %s", user.Email, subject)
+	h.createAuditEntry(r, adminUser.ID, "sent_user_email", reportID, details)
+
+	http.Redirect(w, r, fmt.Sprintf("/admin/reports/%s", reportID), http.StatusFound)
+}
+
 // --- Helpers ---
 
 func (h *AdminHandler) render(w http.ResponseWriter, r *http.Request, name string, data map[string]interface{}) {
