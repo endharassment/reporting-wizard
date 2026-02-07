@@ -1,0 +1,40 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section class="wizard">
+  <div class="step-indicator" aria-label="Step 2 of 4">
+    <span class="step completed">1. URLs</span>
+    <span class="step active" aria-current="step">2. Infrastructure</span>
+    <span class="step">3. Evidence</span>
+    <span class="step">4. Review</span>
+  </div>
+
+  <h1>Step 2: Cloudflare Detected</h1>
+
+  <div class="alert alert-warning" role="alert">
+    <strong>This site is behind Cloudflare (AS13335).</strong>
+    <p>Cloudflare is a CDN/proxy that hides the actual hosting provider. To identify the origin server, you must first file a report with Cloudflare and request that they reveal the origin IP.</p>
+  </div>
+
+  <h2>What to do</h2>
+  <ol>
+    <li>
+      Visit <a href="https://abuse.cloudflare.com/threat" target="_blank" rel="noopener noreferrer">Cloudflare's abuse reporting form</a> and file a report for <strong>{{ .Report.Domain }}</strong>.
+    </li>
+    <li>
+      Cloudflare will review the report and, if they take action, may reveal the origin server IP address.
+    </li>
+    <li>
+      Once you receive a response from Cloudflare, an admin will enter the origin IP so we can identify the actual hosting provider and send an abuse report to them.
+    </li>
+  </ol>
+
+  <form method="post" action="/wizard/step2/{{ .Report.ID }}/cloudflare-ack">
+    <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">I've Filed with Cloudflare</button>
+      <a href="/reports/{{ .Report.ID }}" class="btn btn-secondary">Save and Continue Later</a>
+    </div>
+  </form>
+</section>
+{{ end }}

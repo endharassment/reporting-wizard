@@ -1,0 +1,95 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section>
+  <h1>Report: {{ .Report.Domain }}</h1>
+  <p><span class="badge badge-{{ .Report.Status }}">{{ .Report.Status }}</span></p>
+
+  <section class="detail-section">
+    <h2>URLs</h2>
+    <ul>
+      {{ range .Report.URLs }}
+      <li><code>{{ . }}</code></li>
+      {{ end }}
+    </ul>
+  </section>
+
+  <section class="detail-section">
+    <h2>Violation</h2>
+    <dl>
+      <dt>Type</dt>
+      <dd>{{ .Report.ViolationType }}</dd>
+      <dt>Description</dt>
+      <dd>{{ .Report.Description }}</dd>
+    </dl>
+  </section>
+
+  <section class="detail-section">
+    <h2>Evidence</h2>
+    {{ if .Evidence }}
+    <ul class="evidence-list">
+      {{ range .Evidence }}
+      <li>
+        <span class="evidence-filename">{{ .Filename }}</span>
+        <span class="evidence-meta">{{ .ContentType }} &middot; SHA-256: <code class="hash">{{ .SHA256 }}</code></span>
+      </li>
+      {{ end }}
+    </ul>
+    {{ else }}
+    <p>No evidence files uploaded.</p>
+    {{ end }}
+  </section>
+
+  {{ if .Timeline }}
+  <section class="detail-section">
+    <h2>Status Timeline</h2>
+    <ol class="timeline">
+      {{ range .Timeline }}
+      <li class="timeline-entry">
+        <time datetime="{{ .CreatedAt.Format "2006-01-02T15:04:05Z" }}">{{ .CreatedAt.Format "Jan 2, 2006 3:04 PM" }}</time>
+        <span class="timeline-action">{{ .Action }}</span>
+        {{ if .Details }}<span class="timeline-details">{{ .Details }}</span>{{ end }}
+      </li>
+      {{ end }}
+    </ol>
+  </section>
+  {{ end }}
+
+  {{ if .Emails }}
+  <section class="detail-section">
+    <h2>Outgoing Emails</h2>
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Recipient</th>
+            <th scope="col">Type</th>
+            <th scope="col">Status</th>
+            <th scope="col">Sent</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{ range .Emails }}
+          <tr>
+            <td>{{ .Recipient }} ({{ .RecipientOrg }})</td>
+            <td>{{ .EmailType }}</td>
+            <td><span class="badge badge-{{ .Status }}">{{ .Status }}</span></td>
+            <td>
+              {{ if .SentAt }}
+              <time datetime="{{ .SentAt.Format "2006-01-02T15:04:05Z" }}">{{ .SentAt.Format "Jan 2, 2006 3:04 PM" }}</time>
+              {{ else }}
+              --
+              {{ end }}
+            </td>
+          </tr>
+          {{ end }}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {{ end }}
+
+  <div class="form-actions">
+    <a href="/reports" class="btn btn-secondary">Back to Reports</a>
+  </div>
+</section>
+{{ end }}

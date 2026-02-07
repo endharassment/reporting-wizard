@@ -1,0 +1,87 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section class="wizard">
+  <div class="step-indicator" aria-label="Step 3 of 4">
+    <span class="step completed">1. URLs</span>
+    <span class="step completed">2. Infrastructure</span>
+    <span class="step active" aria-current="step">3. Evidence</span>
+    <span class="step">4. Review</span>
+  </div>
+
+  <h1>Step 3: Upload Evidence</h1>
+  <p>Upload screenshots or other files that document the abusive content, and describe the violation.</p>
+
+  <form method="post" action="/wizard/step3/{{ .Report.ID }}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+
+    <div class="form-group">
+      <label for="violation_type">Violation Type</label>
+      <select id="violation_type" name="violation_type" required>
+        <option value="">-- Select a violation type --</option>
+        <option value="harassment"{{ if eq (string .Report.ViolationType) "harassment" }} selected{{ end }}>Harassment</option>
+        <option value="hate_speech"{{ if eq (string .Report.ViolationType) "hate_speech" }} selected{{ end }}>Hate Speech</option>
+        <option value="ncii"{{ if eq (string .Report.ViolationType) "ncii" }} selected{{ end }}>Non-Consensual Intimate Images (NCII)</option>
+        <option value="doxxing"{{ if eq (string .Report.ViolationType) "doxxing" }} selected{{ end }}>Doxxing</option>
+        <option value="copyvio"{{ if eq (string .Report.ViolationType) "copyvio" }} selected{{ end }}>Copyright / Likeness Violation</option>
+      </select>
+      {{ if .Errors.ViolationType }}
+      <span class="form-error" role="alert">{{ .Errors.ViolationType }}</span>
+      {{ end }}
+    </div>
+
+    <div id="ncii-warning" class="alert alert-warning" role="alert" style="display: none;">
+      <strong>Important:</strong> NCII reports should only be filed by the affected individual or their authorized legal representative.
+    </div>
+
+    <div class="form-group">
+      <label for="description">Description</label>
+      <textarea id="description" name="description" rows="5" required
+        placeholder="Describe the abusive content and its impact..."
+        aria-describedby="desc-help">{{ .Report.Description }}</textarea>
+      <small id="desc-help" class="form-help">Provide context about the abuse. This will be included in the report sent to hosting providers.</small>
+      {{ if .Errors.Description }}
+      <span class="form-error" role="alert">{{ .Errors.Description }}</span>
+      {{ end }}
+    </div>
+
+    <div class="form-group">
+      <label for="evidence">Upload Evidence Files</label>
+      <div class="upload-area" id="upload-area">
+        <input type="file" id="evidence" name="evidence" multiple
+          accept="image/*,.pdf,.txt,.html"
+          aria-describedby="evidence-help">
+        <p class="upload-hint">Select files or drag and drop here</p>
+      </div>
+      <small id="evidence-help" class="form-help">Accepted formats: images, PDF, text, HTML.</small>
+    </div>
+
+    {{ if .Evidence }}
+    <h2>Uploaded Evidence</h2>
+    <ul class="evidence-list">
+      {{ range .Evidence }}
+      <li>
+        <span class="evidence-filename">{{ .Filename }}</span>
+        <span class="evidence-meta">{{ .ContentType }} &middot; {{ .SizeBytes }} bytes</span>
+      </li>
+      {{ end }}
+    </ul>
+    {{ end }}
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Continue to Review</button>
+    </div>
+  </form>
+</section>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var select = document.getElementById('violation_type');
+    var warning = document.getElementById('ncii-warning');
+    function checkNCII() {
+      warning.style.display = select.value === 'ncii' ? 'block' : 'none';
+    }
+    select.addEventListener('change', checkNCII);
+    checkNCII();
+  });
+</script>
+{{ end }}

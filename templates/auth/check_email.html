@@ -1,0 +1,9 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section class="auth-page">
+  <h1>Check Your Email</h1>
+  <p>We sent a magic link to <strong>{{ .Email }}</strong>.</p>
+  <p>Click the link in the email to sign in. The link expires in 15 minutes.</p>
+  <p class="auth-note">Did not receive the email? Check your spam folder, or <a href="/auth/login">try again</a>.</p>
+</section>
+{{ end }}

@@ -1,0 +1,35 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section>
+  <h1>My Reports</h1>
+
+  {{ if .Reports }}
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Domain</th>
+          <th scope="col">Violation</th>
+          <th scope="col">Status</th>
+          <th scope="col">Created</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ range .Reports }}
+        <tr>
+          <td>{{ .Domain }}</td>
+          <td>{{ .ViolationType }}</td>
+          <td><span class="badge badge-{{ .Status }}">{{ .Status }}</span></td>
+          <td><time datetime="{{ .CreatedAt.Format "2006-01-02T15:04:05Z" }}">{{ .CreatedAt.Format "Jan 2, 2006" }}</time></td>
+          <td><a href="/reports/{{ .ID }}">View</a></td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </div>
+  {{ else }}
+  <p>You have not filed any reports yet. <a href="/wizard/step1">File a report</a> to get started.</p>
+  {{ end }}
+</section>
+{{ end }}

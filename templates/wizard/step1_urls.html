@@ -1,0 +1,33 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section class="wizard">
+  <div class="step-indicator" aria-label="Step 1 of 4">
+    <span class="step active" aria-current="step">1. URLs</span>
+    <span class="step">2. Infrastructure</span>
+    <span class="step">3. Evidence</span>
+    <span class="step">4. Review</span>
+  </div>
+
+  <h1>Step 1: Enter URLs</h1>
+  <p>Enter the URLs of the abusive content, one per line. All URLs must be from the same domain.</p>
+
+  <form method="post" action="/wizard/step1">
+    <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+
+    <div class="form-group">
+      <label for="urls">URLs (one per line)</label>
+      <textarea id="urls" name="urls" rows="8" required
+        placeholder="https://example.com/page1&#10;https://example.com/page2"
+        aria-describedby="urls-help">{{ .FormValues.URLs }}</textarea>
+      <small id="urls-help" class="form-help">All URLs must belong to the same domain.</small>
+      {{ if .Errors.URLs }}
+      <span class="form-error" role="alert">{{ .Errors.URLs }}</span>
+      {{ end }}
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Look Up Infrastructure</button>
+    </div>
+  </form>
+</section>
+{{ end }}

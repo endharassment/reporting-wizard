@@ -1,0 +1,46 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section>
+  <h1>Approval Queue</h1>
+
+  {{ if .PendingEmails }}
+  <div class="table-responsive">
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Report Domain</th>
+          <th scope="col">Recipient</th>
+          <th scope="col">Type</th>
+          <th scope="col">Created</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ range .PendingEmails }}
+        <tr id="email-{{ .ID }}">
+          <td><a href="/admin/reports/{{ .ReportID }}">{{ .RecipientOrg }}</a></td>
+          <td>{{ .Recipient }}</td>
+          <td>{{ .EmailType }}</td>
+          <td><time datetime="{{ .CreatedAt.Format "2006-01-02T15:04:05Z" }}">{{ .CreatedAt.Format "Jan 2, 2006" }}</time></td>
+          <td class="action-buttons">
+            <button class="btn btn-primary btn-sm"
+              hx-post="/admin/emails/{{ .ID }}/approve"
+              hx-target="#email-{{ .ID }}"
+              hx-swap="outerHTML"
+              hx-confirm="Approve this email for sending?">Approve</button>
+            <button class="btn btn-danger btn-sm"
+              hx-post="/admin/emails/{{ .ID }}/reject"
+              hx-target="#email-{{ .ID }}"
+              hx-swap="outerHTML"
+              hx-confirm="Reject this email?">Reject</button>
+          </td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </div>
+  {{ else }}
+  <p>No emails pending approval.</p>
+  {{ end }}
+</section>
+{{ end }}

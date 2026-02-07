@@ -1,0 +1,30 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section class="hero">
+  <h1>Report Abuse. Protect People.</h1>
+  <p>The End Harassment Reporting Wizard automates the process of filing abuse reports against hate sites and harassment campaigns with their hosting providers.</p>
+  <a href="/wizard/step1" class="btn btn-primary btn-lg">File a Report</a>
+</section>
+
+<section class="process-overview">
+  <h2>How It Works</h2>
+  <ol class="steps-overview">
+    <li>
+      <strong>Enter URLs</strong>
+      <p>Provide the URLs of the abusive content you want to report.</p>
+    </li>
+    <li>
+      <strong>Discover Infrastructure</strong>
+      <p>We automatically identify the hosting providers, IP addresses, and abuse contacts responsible for serving the content.</p>
+    </li>
+    <li>
+      <strong>Upload Evidence</strong>
+      <p>Attach screenshots or other evidence documenting the abuse, and classify the violation type.</p>
+    </li>
+    <li>
+      <strong>Review &amp; Submit</strong>
+      <p>Review the generated abuse report and submit it for admin approval. Once approved, it is sent to the appropriate abuse contacts.</p>
+    </li>
+  </ol>
+</section>
+{{ end }}

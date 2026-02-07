@@ -1,0 +1,118 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section>
+  <h1>Admin: Report {{ .Report.Domain }}</h1>
+  <p><span class="badge badge-{{ .Report.Status }}">{{ .Report.Status }}</span></p>
+
+  <section class="detail-section">
+    <h2>URLs</h2>
+    <ul>
+      {{ range .Report.URLs }}
+      <li><code>{{ . }}</code></li>
+      {{ end }}
+    </ul>
+  </section>
+
+  <section class="detail-section">
+    <h2>Violation</h2>
+    <dl>
+      <dt>Type</dt>
+      <dd>{{ .Report.ViolationType }}</dd>
+      <dt>Description</dt>
+      <dd>{{ .Report.Description }}</dd>
+    </dl>
+  </section>
+
+  <section class="detail-section">
+    <h2>Evidence</h2>
+    <p class="content-warning">Evidence may contain disturbing content. Click to reveal.</p>
+    {{ if .Evidence }}
+    <ul class="evidence-list">
+      {{ range .Evidence }}
+      <li class="evidence-item">
+        <span class="evidence-filename">{{ .Filename }}</span>
+        <span class="evidence-meta">{{ .ContentType }} &middot; {{ .SizeBytes }} bytes &middot; SHA-256: <code class="hash">{{ .SHA256 }}</code></span>
+        <div class="evidence-preview blurred" tabindex="0" role="button" aria-label="Click to reveal evidence preview for {{ .Filename }}">
+          <a href="/evidence/{{ .ID }}" target="_blank" rel="noopener">View file</a>
+        </div>
+      </li>
+      {{ end }}
+    </ul>
+    {{ else }}
+    <p>No evidence files uploaded.</p>
+    {{ end }}
+  </section>
+
+  {{ if eq (string .Report.Status) "cloudflare_pending" }}
+  <section class="detail-section">
+    <h2>Cloudflare Origin IP</h2>
+    <p>This report is awaiting the origin IP from Cloudflare. Enter it below when received.</p>
+    <form method="post" action="/admin/reports/{{ .Report.ID }}/origin-ip">
+      <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+      <div class="form-group">
+        <label for="origin_ip">Origin IP Address</label>
+        <input type="text" id="origin_ip" name="origin_ip" required
+          placeholder="203.0.113.1"
+          pattern="[0-9a-fA-F.:]+">
+      </div>
+      <button type="submit" class="btn btn-primary">Save Origin IP</button>
+    </form>
+  </section>
+  {{ end }}
+
+  <section class="detail-section">
+    <h2>Actions</h2>
+    <div class="form-actions">
+      <form method="post" action="/admin/reports/{{ .Report.ID }}/approve" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        <button type="submit" class="btn btn-primary"
+          onclick="return confirm('Approve this report and queue emails for sending?')">Approve Report</button>
+      </form>
+      <form method="post" action="/admin/reports/{{ .Report.ID }}/reject" style="display:inline">
+        <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+        <div class="form-group">
+          <label for="reject_notes">Rejection Notes</label>
+          <textarea id="reject_notes" name="notes" rows="3" placeholder="Reason for rejection..."></textarea>
+        </div>
+        <button type="submit" class="btn btn-danger"
+          onclick="return confirm('Reject this report?')">Reject Report</button>
+      </form>
+    </div>
+  </section>
+
+  {{ if .AuditLog }}
+  <section class="detail-section">
+    <h2>Audit Log</h2>
+    <ol class="timeline">
+      {{ range .AuditLog }}
+      <li class="timeline-entry">
+        <time datetime="{{ .CreatedAt.Format "2006-01-02T15:04:05Z" }}">{{ .CreatedAt.Format "Jan 2, 2006 3:04 PM" }}</time>
+        <span class="timeline-action">{{ .Action }}</span>
+        {{ if .Details }}<span class="timeline-details">{{ .Details }}</span>{{ end }}
+      </li>
+      {{ end }}
+    </ol>
+  </section>
+  {{ end }}
+
+  <div class="form-actions">
+    <a href="/admin/queue" class="btn btn-secondary">Back to Queue</a>
+  </div>
+</section>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.evidence-preview.blurred').forEach(function(el) {
+      el.addEventListener('click', function() {
+        this.classList.remove('blurred');
+      });
+      el.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          this.classList.remove('blurred');
+        }
+      });
+    });
+  });
+</script>
+{{ end }}

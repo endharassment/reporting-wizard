@@ -1,0 +1,99 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section class="wizard">
+  <div class="step-indicator" aria-label="Step 4 of 4">
+    <span class="step completed">1. URLs</span>
+    <span class="step completed">2. Infrastructure</span>
+    <span class="step completed">3. Evidence</span>
+    <span class="step active" aria-current="step">4. Review</span>
+  </div>
+
+  <h1>Step 4: Review &amp; Submit</h1>
+  <p>Please review the details of your report before submitting.</p>
+
+  <section class="review-section">
+    <h2>Domain &amp; URLs</h2>
+    <dl>
+      <dt>Domain</dt>
+      <dd>{{ .Report.Domain }}</dd>
+      <dt>URLs</dt>
+      <dd>
+        <ul>
+          {{ range .Report.URLs }}
+          <li><code>{{ . }}</code></li>
+          {{ end }}
+        </ul>
+      </dd>
+    </dl>
+  </section>
+
+  <section class="review-section">
+    <h2>Violation</h2>
+    <dl>
+      <dt>Type</dt>
+      <dd>{{ .Report.ViolationType }}</dd>
+      <dt>Description</dt>
+      <dd>{{ .Report.Description }}</dd>
+    </dl>
+  </section>
+
+  <section class="review-section">
+    <h2>Evidence</h2>
+    {{ if .Evidence }}
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">File</th>
+          <th scope="col">Type</th>
+          <th scope="col">SHA-256</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ range .Evidence }}
+        <tr>
+          <td>{{ .Filename }}</td>
+          <td>{{ .ContentType }}</td>
+          <td><code class="hash">{{ .SHA256 }}</code></td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+    {{ else }}
+    <p>No evidence files uploaded.</p>
+    {{ end }}
+  </section>
+
+  <section class="review-section">
+    <h2>Abuse Contacts</h2>
+    <ul>
+      {{ range .AbuseContacts }}
+      <li>{{ . }}</li>
+      {{ end }}
+    </ul>
+  </section>
+
+  {{ if .EmailPreview }}
+  <section class="review-section">
+    <h2>Email Preview</h2>
+    <div class="email-preview">
+      <dl>
+        <dt>To</dt>
+        <dd>{{ .EmailPreview.Recipient }}</dd>
+        <dt>Subject</dt>
+        <dd>{{ .EmailPreview.Subject }}</dd>
+      </dl>
+      <pre class="email-body">{{ .EmailPreview.Body }}</pre>
+    </div>
+  </section>
+  {{ end }}
+
+  <form method="post" action="/wizard/step4/{{ .Report.ID }}/submit">
+    <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+    <p class="review-note">Your report will be reviewed by an admin before being sent to abuse contacts.</p>
+    <div class="form-actions">
+      <a href="/wizard/step3/{{ .Report.ID }}" class="btn btn-secondary">Back to Evidence</a>
+      <button type="submit" class="btn btn-primary">Submit for Admin Review</button>
+    </div>
+  </form>
+</section>
+{{ end }}
