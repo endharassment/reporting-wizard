@@ -106,6 +106,17 @@
   </section>
   {{ end }}
 
+  <div class="alert alert-warning" role="alert">
+    <strong>Important &mdash; please read before submitting:</strong>
+    <p>By submitting this report, you understand that:</p>
+    <ul>
+      <li>The hosting provider <strong>will forward</strong> this report &mdash; including your description, violation type, and evidence links &mdash; to the site operator.</li>
+      <li>Operators of abusive sites are known to <strong>retaliate</strong> by publicly posting abuse complaints and using them to direct further harassment at the complainant.</li>
+      <li>There is <strong>no expectation of privacy</strong> for abuse reports. Assume everything in this report will be seen by the people you are reporting.</li>
+    </ul>
+    <p>Your personal email address is not included in the outgoing report. Reports are sent on behalf of our organization.</p>
+  </div>
+
   <form method="post" action="/wizard/step4/{{ .Report.ID }}/submit">
     <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
     <p class="review-note">Your report will be reviewed by an admin before being sent to abuse contacts.</p>
