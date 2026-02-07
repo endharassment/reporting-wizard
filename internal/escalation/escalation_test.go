@@ -93,13 +93,6 @@ func (m *mockStore) GetSession(context.Context, string) (*model.Session, error) 
 }
 func (m *mockStore) DeleteSession(context.Context, string) error { panic("not implemented") }
 func (m *mockStore) DeleteExpiredSessions(context.Context) error { panic("not implemented") }
-func (m *mockStore) CreateMagicLink(context.Context, *model.MagicLink) error {
-	panic("not implemented")
-}
-func (m *mockStore) GetMagicLink(context.Context, string) (*model.MagicLink, error) {
-	panic("not implemented")
-}
-func (m *mockStore) MarkMagicLinkUsed(context.Context, string) error { panic("not implemented") }
 func (m *mockStore) CreateReport(context.Context, *model.Report) error {
 	panic("not implemented")
 }
@@ -140,6 +133,12 @@ func (m *mockStore) CreateAuditLogEntry(context.Context, *model.AuditLogEntry) e
 	panic("not implemented")
 }
 func (m *mockStore) ListAuditLogByTarget(context.Context, string) ([]*model.AuditLogEntry, error) {
+	panic("not implemented")
+}
+func (m *mockStore) CreateURLSnapshot(context.Context, *model.URLSnapshot) error {
+	panic("not implemented")
+}
+func (m *mockStore) ListURLSnapshotsByReport(context.Context, string) ([]*model.URLSnapshot, error) {
 	panic("not implemented")
 }
 

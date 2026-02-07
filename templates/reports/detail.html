@@ -29,15 +29,35 @@
     <ul class="evidence-list">
       {{ range .Evidence }}
       <li>
+        {{ if .EvidenceURL }}
+        <a href="{{ .EvidenceURL }}" target="_blank" rel="noopener noreferrer">{{ .EvidenceURL }}</a>
+        {{ else }}
         <span class="evidence-filename">{{ .Filename }}</span>
         <span class="evidence-meta">{{ .ContentType }} &middot; SHA-256: <code class="hash">{{ .SHA256 }}</code></span>
+        {{ end }}
       </li>
       {{ end }}
     </ul>
     {{ else }}
-    <p>No evidence files uploaded.</p>
+    <p>No evidence provided.</p>
     {{ end }}
   </section>
+
+  {{ if .Snapshots }}
+  <section class="detail-section">
+    <h2>URL Text Snapshots</h2>
+    {{ range .Snapshots }}
+    <details>
+      <summary>{{ .URL }}{{ if .Error }} <span class="form-error">(error)</span>{{ end }}</summary>
+      {{ if .Error }}
+      <p class="form-error">{{ .Error }}</p>
+      {{ else }}
+      <pre class="snapshot-text">{{ .TextContent }}</pre>
+      {{ end }}
+    </details>
+    {{ end }}
+  </section>
+  {{ end }}
 
   {{ if .Timeline }}
   <section class="detail-section">

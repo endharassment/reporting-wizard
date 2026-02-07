@@ -2,14 +2,11 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"net/mail"
 	"strings"
 	"time"
 
@@ -21,7 +18,6 @@ import (
 const (
 	sessionCookieName = "session_id"
 	sessionDuration   = 7 * 24 * time.Hour
-	magicLinkExpiry   = 15 * time.Minute
 )
 
 // SessionMiddleware reads the session cookie, validates the session, and
@@ -95,111 +91,7 @@ func RequireAdmin(next http.Handler) http.Handler {
 
 // HandleLogin renders the login page.
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "login.html", map[string]interface{}{
-		"Errors": map[string]string{},
-	})
-}
-
-// HandleMagicLinkRequest handles POST /auth/magic-link.
-func (s *Server) HandleMagicLinkRequest(w http.ResponseWriter, r *http.Request) {
-	email := strings.TrimSpace(r.FormValue("email"))
-
-	errors := map[string]string{}
-	if email == "" {
-		errors["Email"] = "Email is required."
-	} else if _, err := mail.ParseAddress(email); err != nil {
-		errors["Email"] = "Please enter a valid email address."
-	}
-
-	if len(errors) > 0 {
-		s.render(w, r, "login.html", map[string]interface{}{
-			"Errors": errors,
-		})
-		return
-	}
-
-	tokenBytes := make([]byte, 32)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		log.Printf("ERROR: generate magic link token: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-	token := hex.EncodeToString(tokenBytes)
-
-	now := time.Now().UTC()
-	ml := &model.MagicLink{
-		Token:     token,
-		Email:     email,
-		ExpiresAt: now.Add(magicLinkExpiry),
-		Used:      false,
-		CreatedAt: now,
-	}
-
-	if err := s.store.CreateMagicLink(r.Context(), ml); err != nil {
-		log.Printf("ERROR: create magic link: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	verifyURL := fmt.Sprintf("%s/auth/verify?token=%s", s.config.BaseURL, token)
-	log.Printf("INFO: magic link for %s: %s", email, verifyURL)
-
-	// In production, send via SendGrid. For now, log it.
-	if s.config.SendGridKey != "" {
-		// Use SendGrid to send the magic link email.
-		// For now we just log the URL.
-		log.Printf("INFO: would send magic link email to %s via SendGrid", email)
-	}
-
-	s.render(w, r, "check_email.html", map[string]interface{}{
-		"Email": email,
-	})
-}
-
-// HandleMagicLinkVerify handles GET /auth/verify?token=...
-func (s *Server) HandleMagicLinkVerify(w http.ResponseWriter, r *http.Request) {
-	token := r.URL.Query().Get("token")
-	if token == "" {
-		http.Error(w, "Missing token", http.StatusBadRequest)
-		return
-	}
-
-	ml, err := s.store.GetMagicLink(r.Context(), token)
-	if err != nil {
-		http.Error(w, "Invalid or expired token", http.StatusBadRequest)
-		return
-	}
-
-	if ml.Used {
-		http.Error(w, "Token already used", http.StatusBadRequest)
-		return
-	}
-
-	if time.Now().UTC().After(ml.ExpiresAt) {
-		http.Error(w, "Token expired", http.StatusBadRequest)
-		return
-	}
-
-	if err := s.store.MarkMagicLinkUsed(r.Context(), token); err != nil {
-		log.Printf("ERROR: mark magic link used: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	user, err := s.getOrCreateUser(r.Context(), ml.Email, "")
-	if err != nil {
-		log.Printf("ERROR: get or create user: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	if err := s.createSession(w, r, user.ID); err != nil {
-		log.Printf("ERROR: create session: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	http.Redirect(w, r, "/", http.StatusFound)
+	s.render(w, r, "login.html", nil)
 }
 
 // HandleLogout handles POST /auth/logout.

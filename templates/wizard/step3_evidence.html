@@ -8,10 +8,10 @@
     <span class="step">4. Review</span>
   </div>
 
-  <h1>Step 3: Upload Evidence</h1>
-  <p>Upload screenshots or other files that document the abusive content, and describe the violation.</p>
+  <h1>Step 3: Provide Evidence</h1>
+  <p>Describe the violation and link to evidence you have uploaded to your own cloud storage (Google Drive, Dropbox, iCloud, etc.).</p>
 
-  <form method="post" action="/wizard/step3/{{ .Report.ID }}" enctype="multipart/form-data">
+  <form method="post" action="/wizard/step3/{{ .Report.ID }}">
     <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
 
     <div class="form-group">
@@ -31,6 +31,7 @@
 
     <div id="ncii-warning" class="alert alert-warning" role="alert" style="display: none;">
       <strong>Important:</strong> NCII reports should only be filed by the affected individual or their authorized legal representative.
+      <strong>If the content involves minors, this constitutes CSAM.</strong> Do <em>not</em> upload, screenshot, or redistribute it. Report it immediately to the <a href="https://report.cybertip.org/" target="_blank" rel="noopener noreferrer">NCMEC CyberTipline</a> and <a href="https://www.ic3.gov/" target="_blank" rel="noopener noreferrer">IC3</a>.
     </div>
 
     <div class="form-group">
@@ -45,23 +46,29 @@
     </div>
 
     <div class="form-group">
-      <label for="evidence">Upload Evidence Files</label>
-      <div class="upload-area" id="upload-area">
-        <input type="file" id="evidence" name="evidence" multiple
-          accept="image/*,.pdf,.txt,.html"
-          aria-describedby="evidence-help">
-        <p class="upload-hint">Select files or drag and drop here</p>
-      </div>
-      <small id="evidence-help" class="form-help">Accepted formats: images, PDF, text, HTML.</small>
+      <label for="evidence_urls">Evidence Links (one per line)</label>
+      <textarea id="evidence_urls" name="evidence_urls" rows="4"
+        placeholder="https://drive.google.com/file/d/.../view?usp=sharing&#10;https://www.dropbox.com/s/.../screenshot.png?dl=0"
+        aria-describedby="evidence-help">{{ .EvidenceURLs }}</textarea>
+      <small id="evidence-help" class="form-help">Upload your screenshots and evidence files to your own cloud storage (Google Drive, Dropbox, iCloud, OneDrive, etc.) and paste the share links here. Make sure the links are publicly accessible or set to "anyone with the link can view."</small>
+      {{ if .Errors.EvidenceURLs }}
+      <span class="form-error" role="alert">{{ .Errors.EvidenceURLs }}</span>
+      {{ end }}
     </div>
 
     {{ if .Evidence }}
-    <h2>Uploaded Evidence</h2>
+    <h2>Previously Added Evidence</h2>
     <ul class="evidence-list">
       {{ range .Evidence }}
       <li>
+        {{ if .EvidenceURL }}
+        <a href="{{ .EvidenceURL }}" target="_blank" rel="noopener noreferrer" class="evidence-url">{{ .EvidenceURL }}</a>
+        {{ else }}
         <span class="evidence-filename">{{ .Filename }}</span>
-        <span class="evidence-meta">{{ .ContentType }} &middot; {{ .SizeBytes }} bytes</span>
+        {{ end }}
+        {{ if .Description }}
+        <span class="evidence-meta">{{ .Description }}</span>
+        {{ end }}
       </li>
       {{ end }}
     </ul>

@@ -84,7 +84,15 @@ func composeBody(cfg EmailConfig, report *model.Report, infraResults []*model.In
 	}
 
 	if len(evidence) > 0 {
-		b.WriteString(fmt.Sprintf("Evidence: %d file(s) attached to the machine-readable X-ARF report.\n\n", len(evidence)))
+		b.WriteString("Evidence:\n")
+		for _, e := range evidence {
+			if e.EvidenceURL != "" {
+				b.WriteString(fmt.Sprintf("  - %s\n", e.EvidenceURL))
+			} else {
+				b.WriteString(fmt.Sprintf("  - %s (%s, SHA-256: %s)\n", e.Filename, e.ContentType, e.SHA256))
+			}
+		}
+		b.WriteString("\n")
 	}
 
 	b.WriteString("A machine-readable X-ARF v4 report is attached to this email as a JSON file.\n\n")

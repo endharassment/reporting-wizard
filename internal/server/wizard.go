@@ -84,6 +84,12 @@ func (s *Server) HandleWizardStep1Submit(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	// Best-effort URL text snapshotting. Run asynchronously so the user
+	// doesn't have to wait for Tor fetches to complete.
+	if s.snapshotter != nil {
+		go s.snapshotURLs(rpt.ID, urls)
+	}
+
 	http.Redirect(w, r, fmt.Sprintf("/wizard/step2/%s", rpt.ID), http.StatusFound)
 }
 
@@ -189,7 +195,7 @@ func (s *Server) HandleCloudflareAck(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, fmt.Sprintf("/reports/%s", reportID), http.StatusFound)
 }
 
-// HandleWizardStep3 renders the evidence upload form.
+// HandleWizardStep3 renders the evidence form.
 func (s *Server) HandleWizardStep3(w http.ResponseWriter, r *http.Request) {
 	reportID := chi.URLParam(r, "reportID")
 	user := UserFromContext(r.Context())
@@ -206,63 +212,23 @@ func (s *Server) HandleWizardStep3(w http.ResponseWriter, r *http.Request) {
 
 	evidence, _ := s.store.ListEvidenceByReport(r.Context(), reportID)
 
+	// Build a string of existing evidence URLs for prepopulation.
+	var existingURLs []string
+	for _, ev := range evidence {
+		if ev.EvidenceURL != "" {
+			existingURLs = append(existingURLs, ev.EvidenceURL)
+		}
+	}
+
 	s.render(w, r, "step3_evidence.html", map[string]interface{}{
-		"Report":   rpt,
-		"Evidence": evidence,
-		"Errors":   map[string]string{},
+		"Report":       rpt,
+		"Evidence":     evidence,
+		"EvidenceURLs": strings.Join(existingURLs, "\n"),
+		"Errors":       map[string]string{},
 	})
 }
 
-// HandleWizardStep3Upload handles multipart file upload for evidence.
-func (s *Server) HandleWizardStep3Upload(w http.ResponseWriter, r *http.Request) {
-	reportID := chi.URLParam(r, "reportID")
-	user := UserFromContext(r.Context())
-
-	rpt, err := s.store.GetReport(r.Context(), reportID)
-	if err != nil {
-		http.Error(w, "Report not found", http.StatusNotFound)
-		return
-	}
-	if rpt.UserID != user.ID {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
-
-	// Parse multipart form, max 25MB.
-	if err := r.ParseMultipartForm(25 << 20); err != nil {
-		http.Error(w, "File too large", http.StatusBadRequest)
-		return
-	}
-
-	file, header, err := r.FormFile("evidence")
-	if err != nil {
-		http.Error(w, "No file provided", http.StatusBadRequest)
-		return
-	}
-	defer file.Close()
-
-	ev, err := report.HandleUpload(r.Context(), s.config.EvidenceDir, reportID, header.Filename, header.Header.Get("Content-Type"), file)
-	if err != nil {
-		log.Printf("ERROR: upload evidence: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if err := s.store.CreateEvidence(r.Context(), ev); err != nil {
-		log.Printf("ERROR: store evidence: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	// Return htmx partial for the new evidence item.
-	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprintf(w, `<li><span class="evidence-filename">%s</span><span class="evidence-meta">%s &middot; %d bytes</span></li>`,
-		template_HTMLEscapeString(ev.Filename),
-		template_HTMLEscapeString(ev.ContentType),
-		ev.SizeBytes)
-}
-
-// HandleWizardStep3Submit saves violation type and description.
+// HandleWizardStep3Submit saves violation type, description, and evidence URLs.
 func (s *Server) HandleWizardStep3Submit(w http.ResponseWriter, r *http.Request) {
 	reportID := chi.URLParam(r, "reportID")
 	user := UserFromContext(r.Context())
@@ -279,6 +245,7 @@ func (s *Server) HandleWizardStep3Submit(w http.ResponseWriter, r *http.Request)
 
 	violationType := r.FormValue("violation_type")
 	description := strings.TrimSpace(r.FormValue("description"))
+	evidenceURLsRaw := r.FormValue("evidence_urls")
 
 	errors := map[string]string{}
 	if violationType == "" {
@@ -288,33 +255,44 @@ func (s *Server) HandleWizardStep3Submit(w http.ResponseWriter, r *http.Request)
 		errors["Description"] = "Please provide a description."
 	}
 
+	// Parse and validate evidence URLs.
+	var evidenceURLs []string
+	for _, line := range strings.Split(evidenceURLsRaw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parsed, err := url.Parse(line)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+			errors["EvidenceURLs"] = fmt.Sprintf("Invalid URL: %s. Please provide valid HTTP(S) URLs.", line)
+			break
+		}
+		evidenceURLs = append(evidenceURLs, line)
+	}
+
 	if len(errors) > 0 {
 		evidence, _ := s.store.ListEvidenceByReport(r.Context(), reportID)
 		s.render(w, r, "step3_evidence.html", map[string]interface{}{
-			"Report":   rpt,
-			"Evidence": evidence,
-			"Errors":   errors,
+			"Report":       rpt,
+			"Evidence":     evidence,
+			"EvidenceURLs": evidenceURLsRaw,
+			"Errors":       errors,
 		})
 		return
 	}
 
-	// Handle file uploads if present in the same form submission.
-	if r.MultipartForm != nil {
-		files := r.MultipartForm.File["evidence"]
-		for _, fh := range files {
-			file, err := fh.Open()
-			if err != nil {
-				continue
-			}
-			ev, err := report.HandleUpload(r.Context(), s.config.EvidenceDir, reportID, fh.Filename, fh.Header.Get("Content-Type"), file)
-			file.Close()
-			if err != nil {
-				log.Printf("WARN: upload evidence: %v", err)
-				continue
-			}
-			if err := s.store.CreateEvidence(r.Context(), ev); err != nil {
-				log.Printf("WARN: store evidence: %v", err)
-			}
+	// Store each evidence URL as an evidence record.
+	now := time.Now().UTC()
+	for _, u := range evidenceURLs {
+		ev := &model.Evidence{
+			ID:          uuid.New().String(),
+			ReportID:    reportID,
+			EvidenceURL: u,
+			Description: "User-provided evidence link",
+			CreatedAt:   now,
+		}
+		if err := s.store.CreateEvidence(r.Context(), ev); err != nil {
+			log.Printf("ERROR: store evidence URL: %v", err)
 		}
 	}
 
@@ -347,6 +325,7 @@ func (s *Server) HandleWizardStep4(w http.ResponseWriter, r *http.Request) {
 
 	infraResults, _ := s.store.ListInfraResultsByReport(r.Context(), reportID)
 	evidence, _ := s.store.ListEvidenceByReport(r.Context(), reportID)
+	snapshots, _ := s.store.ListURLSnapshotsByReport(r.Context(), reportID)
 
 	// Collect unique abuse contacts.
 	contactSet := make(map[string]bool)
@@ -377,6 +356,7 @@ func (s *Server) HandleWizardStep4(w http.ResponseWriter, r *http.Request) {
 		"Report":        rpt,
 		"InfraResults":  infraResults,
 		"Evidence":      evidence,
+		"Snapshots":     snapshots,
 		"AbuseContacts": abuseContacts,
 		"EmailPreview":  emailPreview,
 	})
@@ -451,17 +431,6 @@ func dedup(asns []int) []int {
 		}
 	}
 	return result
-}
-
-// template_HTMLEscapeString escapes a string for safe HTML embedding.
-func template_HTMLEscapeString(s string) string {
-	return strings.NewReplacer(
-		"&", "&amp;",
-		"<", "&lt;",
-		">", "&gt;",
-		`"`, "&#34;",
-		"'", "&#39;",
-	).Replace(s)
 }
 
 // HasCloudflare checks if any infra results are behind Cloudflare.

@@ -22,7 +22,7 @@ type SQLiteStore struct {
 
 // NewSQLiteStore opens a SQLite database at the given path and runs migrations.
 func NewSQLiteStore(ctx context.Context, dbPath string) (*SQLiteStore, error) {
-	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(wal)&_pragma=foreign_keys(on)")
+	db, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(wal)&_pragma=foreign_keys(on)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
@@ -136,36 +136,6 @@ func (s *SQLiteStore) DeleteSession(ctx context.Context, id string) error {
 func (s *SQLiteStore) DeleteExpiredSessions(ctx context.Context) error {
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM sessions WHERE expires_at < ?`, time.Now().UTC().Format(timeFormat))
-	return err
-}
-
-// --- Magic Links ---
-
-func (s *SQLiteStore) CreateMagicLink(ctx context.Context, link *model.MagicLink) error {
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO magic_links (token, email, expires_at, used, created_at) VALUES (?, ?, ?, ?, ?)`,
-		link.Token, link.Email, link.ExpiresAt.UTC().Format(timeFormat), boolToInt(link.Used), link.CreatedAt.UTC().Format(timeFormat))
-	return err
-}
-
-func (s *SQLiteStore) GetMagicLink(ctx context.Context, token string) (*model.MagicLink, error) {
-	var ml model.MagicLink
-	var used int
-	var expiresAt, createdAt string
-	err := s.db.QueryRowContext(ctx,
-		`SELECT token, email, expires_at, used, created_at FROM magic_links WHERE token = ?`, token).
-		Scan(&ml.Token, &ml.Email, &expiresAt, &used, &createdAt)
-	if err != nil {
-		return nil, err
-	}
-	ml.ExpiresAt, _ = time.Parse(timeFormat, expiresAt)
-	ml.Used = used != 0
-	ml.CreatedAt, _ = time.Parse(timeFormat, createdAt)
-	return &ml, nil
-}
-
-func (s *SQLiteStore) MarkMagicLinkUsed(ctx context.Context, token string) error {
-	_, err := s.db.ExecContext(ctx, `UPDATE magic_links SET used = 1 WHERE token = ?`, token)
 	return err
 }
 
@@ -320,10 +290,10 @@ func (s *SQLiteStore) DeleteInfraResultsByReport(ctx context.Context, reportID s
 
 func (s *SQLiteStore) CreateEvidence(ctx context.Context, ev *model.Evidence) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO evidence (id, report_id, filename, content_type, storage_path, sha256, size_bytes, description, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO evidence (id, report_id, filename, content_type, storage_path, sha256, size_bytes, evidence_url, description, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		ev.ID, ev.ReportID, ev.Filename, ev.ContentType, ev.StoragePath,
-		ev.SHA256, ev.SizeBytes, ev.Description, ev.CreatedAt.UTC().Format(timeFormat))
+		ev.SHA256, ev.SizeBytes, ev.EvidenceURL, ev.Description, ev.CreatedAt.UTC().Format(timeFormat))
 	return err
 }
 
@@ -331,10 +301,10 @@ func (s *SQLiteStore) GetEvidence(ctx context.Context, id string) (*model.Eviden
 	var ev model.Evidence
 	var createdAt string
 	err := s.db.QueryRowContext(ctx,
-		`SELECT id, report_id, filename, content_type, storage_path, sha256, size_bytes, description, created_at
+		`SELECT id, report_id, filename, content_type, storage_path, sha256, size_bytes, evidence_url, description, created_at
 		 FROM evidence WHERE id = ?`, id).
 		Scan(&ev.ID, &ev.ReportID, &ev.Filename, &ev.ContentType, &ev.StoragePath,
-			&ev.SHA256, &ev.SizeBytes, &ev.Description, &createdAt)
+			&ev.SHA256, &ev.SizeBytes, &ev.EvidenceURL, &ev.Description, &createdAt)
 	if err != nil {
 		return nil, err
 	}
@@ -344,7 +314,7 @@ func (s *SQLiteStore) GetEvidence(ctx context.Context, id string) (*model.Eviden
 
 func (s *SQLiteStore) ListEvidenceByReport(ctx context.Context, reportID string) ([]*model.Evidence, error) {
 	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, report_id, filename, content_type, storage_path, sha256, size_bytes, description, created_at
+		`SELECT id, report_id, filename, content_type, storage_path, sha256, size_bytes, evidence_url, description, created_at
 		 FROM evidence WHERE report_id = ? ORDER BY created_at`, reportID)
 	if err != nil {
 		return nil, err
@@ -356,12 +326,49 @@ func (s *SQLiteStore) ListEvidenceByReport(ctx context.Context, reportID string)
 		var ev model.Evidence
 		var createdAt string
 		err := rows.Scan(&ev.ID, &ev.ReportID, &ev.Filename, &ev.ContentType, &ev.StoragePath,
-			&ev.SHA256, &ev.SizeBytes, &ev.Description, &createdAt)
+			&ev.SHA256, &ev.SizeBytes, &ev.EvidenceURL, &ev.Description, &createdAt)
 		if err != nil {
 			return nil, err
 		}
 		ev.CreatedAt, _ = time.Parse(timeFormat, createdAt)
 		results = append(results, &ev)
+	}
+	return results, rows.Err()
+}
+
+// --- URL Snapshots ---
+
+func (s *SQLiteStore) CreateURLSnapshot(ctx context.Context, snap *model.URLSnapshot) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO url_snapshots (id, report_id, url, text_content, fetched_at, error, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		snap.ID, snap.ReportID, snap.URL, snap.TextContent,
+		snap.FetchedAt.UTC().Format(timeFormat), snap.Error,
+		snap.CreatedAt.UTC().Format(timeFormat))
+	return err
+}
+
+func (s *SQLiteStore) ListURLSnapshotsByReport(ctx context.Context, reportID string) ([]*model.URLSnapshot, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, report_id, url, text_content, fetched_at, error, created_at
+		 FROM url_snapshots WHERE report_id = ? ORDER BY created_at`, reportID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []*model.URLSnapshot
+	for rows.Next() {
+		var snap model.URLSnapshot
+		var fetchedAt, createdAt string
+		err := rows.Scan(&snap.ID, &snap.ReportID, &snap.URL, &snap.TextContent,
+			&fetchedAt, &snap.Error, &createdAt)
+		if err != nil {
+			return nil, err
+		}
+		snap.FetchedAt, _ = time.Parse(timeFormat, fetchedAt)
+		snap.CreatedAt, _ = time.Parse(timeFormat, createdAt)
+		results = append(results, &snap)
 	}
 	return results, rows.Err()
 }

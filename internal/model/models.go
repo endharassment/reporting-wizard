@@ -63,15 +63,6 @@ type Session struct {
 	CreatedAt time.Time
 }
 
-// MagicLink represents a passwordless login token.
-type MagicLink struct {
-	Token     string
-	Email     string
-	ExpiresAt time.Time
-	Used      bool
-	CreatedAt time.Time
-}
-
 // Report represents an abuse report targeting a single domain.
 type Report struct {
 	ID                 string
@@ -102,16 +93,30 @@ type InfraResult struct {
 	CreatedAt    time.Time
 }
 
-// Evidence represents an uploaded evidence file.
+// Evidence represents a piece of evidence for a report. Evidence can be either
+// a URL pointing to user-hosted content (e.g., Google Drive, Dropbox) or
+// a locally stored file (legacy).
 type Evidence struct {
 	ID          string
 	ReportID    string
-	Filename    string
-	ContentType string
-	StoragePath string
-	SHA256      string
-	SizeBytes   int64
+	Filename    string // empty for URL-only evidence
+	ContentType string // empty for URL-only evidence
+	StoragePath string // empty for URL-only evidence
+	SHA256      string // empty for URL-only evidence
+	SizeBytes   int64  // 0 for URL-only evidence
+	EvidenceURL string // URL to cloud-hosted evidence (primary method)
 	Description string
+	CreatedAt   time.Time
+}
+
+// URLSnapshot represents a text-only crawl of a reported URL.
+type URLSnapshot struct {
+	ID          string
+	ReportID    string
+	URL         string
+	TextContent string
+	FetchedAt   time.Time
+	Error       string
 	CreatedAt   time.Time
 }
 

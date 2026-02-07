@@ -40,28 +40,41 @@
   <section class="review-section">
     <h2>Evidence</h2>
     {{ if .Evidence }}
-    <table>
-      <thead>
-        <tr>
-          <th scope="col">File</th>
-          <th scope="col">Type</th>
-          <th scope="col">SHA-256</th>
-        </tr>
-      </thead>
-      <tbody>
-        {{ range .Evidence }}
-        <tr>
-          <td>{{ .Filename }}</td>
-          <td>{{ .ContentType }}</td>
-          <td><code class="hash">{{ .SHA256 }}</code></td>
-        </tr>
+    <ul class="evidence-list">
+      {{ range .Evidence }}
+      <li>
+        {{ if .EvidenceURL }}
+        <a href="{{ .EvidenceURL }}" target="_blank" rel="noopener noreferrer">{{ .EvidenceURL }}</a>
+        {{ else }}
+        <span>{{ .Filename }} ({{ .ContentType }}, SHA-256: <code class="hash">{{ .SHA256 }}</code>)</span>
         {{ end }}
-      </tbody>
-    </table>
+      </li>
+      {{ end }}
+    </ul>
     {{ else }}
-    <p>No evidence files uploaded.</p>
+    <p>No evidence provided.</p>
     {{ end }}
   </section>
+
+  {{ if .Snapshots }}
+  <section class="review-section">
+    <h2>URL Text Snapshots</h2>
+    <p class="form-help">We attempted to capture text-only snapshots of the reported URLs for evidentiary purposes.</p>
+    {{ range .Snapshots }}
+    <details>
+      <summary>
+        {{ .URL }}
+        {{ if .Error }}<span class="form-error">(fetch error)</span>{{ end }}
+      </summary>
+      {{ if .Error }}
+      <p class="form-error">Error: {{ .Error }}</p>
+      {{ else }}
+      <pre class="snapshot-text">{{ .TextContent }}</pre>
+      {{ end }}
+    </details>
+    {{ end }}
+  </section>
+  {{ end }}
 
   <section class="review-section">
     <h2>Abuse Contacts</h2>

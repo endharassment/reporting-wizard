@@ -33,16 +33,23 @@ type Config struct {
 	SessionSecret  string
 }
 
+// Snapshotter defines the interface for crawling and snapshotting URLs.
+type Snapshotter interface {
+	// Snapshot fetches a URL and returns its text-only content.
+	Snapshot(ctx context.Context, targetURL string) (string, error)
+}
+
 // Server is the main HTTP server for the reporting wizard.
 type Server struct {
-	config    Config
-	store     store.Store
-	templates *template.Template
-	discovery *infra.Discovery
-	emailCfg  report.EmailConfig
-	rl        *RateLimiter
-	router    chi.Router
-	staticFS  fs.FS
+	config      Config
+	store       store.Store
+	templates   *template.Template
+	discovery   *infra.Discovery
+	emailCfg    report.EmailConfig
+	rl          *RateLimiter
+	router      chi.Router
+	staticFS    fs.FS
+	snapshotter Snapshotter
 }
 
 // NewServer creates a new Server from the given config, store, and filesystem assets.
@@ -125,8 +132,6 @@ func (s *Server) routes() chi.Router {
 	// Public routes.
 	r.Get("/", s.HandleIndex)
 	r.Get("/auth/login", s.HandleLogin)
-	r.Post("/auth/magic-link", s.HandleMagicLinkRequest)
-	r.Get("/auth/verify", s.HandleMagicLinkVerify)
 	r.Get("/auth/google", s.HandleGoogleLogin)
 	r.Get("/auth/google/callback", s.HandleGoogleCallback)
 	r.Get("/auth/github", s.HandleGitHubLogin)
@@ -143,7 +148,6 @@ func (s *Server) routes() chi.Router {
 		r.Get("/wizard/step2/{reportID}", s.HandleWizardStep2)
 		r.Post("/wizard/step2/{reportID}/cloudflare-ack", s.HandleCloudflareAck)
 		r.Get("/wizard/step3/{reportID}", s.HandleWizardStep3)
-		r.Post("/wizard/step3/{reportID}/upload", s.HandleWizardStep3Upload)
 		r.Post("/wizard/step3/{reportID}", s.HandleWizardStep3Submit)
 		r.Get("/wizard/step4/{reportID}", s.HandleWizardStep4)
 		r.Post("/wizard/step4/{reportID}/submit", s.HandleWizardStep4Submit)
@@ -151,7 +155,6 @@ func (s *Server) routes() chi.Router {
 		// Reports.
 		r.Get("/reports", s.HandleReportsList)
 		r.Get("/reports/{reportID}", s.HandleReportDetail)
-		r.Get("/reports/{reportID}/evidence/{evidenceID}", s.HandleEvidenceDownload)
 	})
 
 	// Admin routes.
@@ -173,7 +176,6 @@ func (s *Server) routes() chi.Router {
 		r.Get("/admin/emails/{emailID}", ah.HandleEmailPreview)
 		r.Post("/admin/emails/{emailID}/approve", ah.HandleEmailApprove)
 		r.Post("/admin/emails/{emailID}/reject", ah.HandleEmailReject)
-		r.Get("/evidence/{evidenceID}", ah.HandleAdminEvidenceDownload)
 	})
 
 	return r
@@ -182,6 +184,11 @@ func (s *Server) routes() chi.Router {
 // Handler returns the HTTP handler for the server.
 func (s *Server) Handler() http.Handler {
 	return s.router
+}
+
+// SetSnapshotter configures the URL snapshotter for text-only URL crawling.
+func (s *Server) SetSnapshotter(snap Snapshotter) {
+	s.snapshotter = snap
 }
 
 // Stop cleans up server resources.

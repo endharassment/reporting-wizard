@@ -5,6 +5,7 @@ import (
 	"flag"
 	"io/fs"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,14 +13,16 @@ import (
 	"time"
 
 	wizard "github.com/endharassment/reporting-wizard"
+	"github.com/endharassment/reporting-wizard/internal/escalation"
+	"github.com/endharassment/reporting-wizard/internal/infra"
 	"github.com/endharassment/reporting-wizard/internal/server"
+	"github.com/endharassment/reporting-wizard/internal/snapshot"
 	"github.com/endharassment/reporting-wizard/internal/store"
 )
 
 func main() {
 	listenAddr := flag.String("listen", envOr("WIZARD_LISTEN", ":8080"), "HTTP listen address")
 	dbPath := flag.String("db", envOr("WIZARD_DB_PATH", "./wizard.db"), "SQLite database path")
-	evidenceDir := flag.String("evidence-dir", envOr("WIZARD_EVIDENCE_DIR", "./evidence"), "Evidence storage directory")
 	flag.Parse()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -30,11 +33,6 @@ func main() {
 		log.Fatalf("Failed to open database: %v", err)
 	}
 	defer db.Close()
-
-	// Ensure evidence directory exists.
-	if err := os.MkdirAll(*evidenceDir, 0o750); err != nil {
-		log.Fatalf("Failed to create evidence directory: %v", err)
-	}
 
 	tmplFS, err := fs.Sub(wizard.TemplatesFS, "templates")
 	if err != nil {
@@ -48,7 +46,6 @@ func main() {
 	cfg := server.Config{
 		ListenAddr:     *listenAddr,
 		DBPath:         *dbPath,
-		EvidenceDir:    *evidenceDir,
 		SendGridKey:    os.Getenv("WIZARD_SENDGRID_KEY"),
 		FromEmail:      envOr("WIZARD_FROM_EMAIL", "reports@endharassment.net"),
 		FromName:       envOr("WIZARD_FROM_NAME", "End Harassment"),
@@ -67,7 +64,23 @@ func main() {
 	}
 	defer srv.Stop()
 
-	log.Println("Escalation engine started (placeholder)")
+	// Set up URL snapshotter (plain HTTP; tor-fetcher can be wired in when
+	// a local Tor SOCKS proxy is available).
+	srv.SetSnapshotter(snapshot.NewPlainHTTPSnapshotter())
+
+	// Start escalation engine.
+	logger := slog.Default()
+	abuseContactLookup := &infra.RDAPAbuseContactLookup{
+		RDAP: infra.NewRDAPClient(),
+		ASN:  infra.NewASNClient(),
+	}
+	escalationEngine := escalation.NewEngine(db, abuseContactLookup, cfg.EscalationDays, logger)
+	go func() {
+		if err := escalationEngine.Run(ctx); err != nil && err != context.Canceled {
+			log.Printf("ERROR: escalation engine: %v", err)
+		}
+	}()
+	log.Println("Escalation engine started")
 
 	httpSrv := &http.Server{
 		Addr:    *listenAddr,

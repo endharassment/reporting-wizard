@@ -25,21 +25,23 @@
 
   <section class="detail-section">
     <h2>Evidence</h2>
-    <p class="content-warning">Evidence may contain disturbing content. Click to reveal.</p>
+    <p class="content-warning">Evidence links may lead to disturbing content. Exercise caution when reviewing.</p>
     {{ if .Evidence }}
     <ul class="evidence-list">
       {{ range .Evidence }}
       <li class="evidence-item">
+        {{ if .EvidenceURL }}
+        <a href="{{ .EvidenceURL }}" target="_blank" rel="noopener noreferrer">{{ .EvidenceURL }}</a>
+        {{ if .Description }}<span class="evidence-meta">{{ .Description }}</span>{{ end }}
+        {{ else }}
         <span class="evidence-filename">{{ .Filename }}</span>
         <span class="evidence-meta">{{ .ContentType }} &middot; {{ .SizeBytes }} bytes &middot; SHA-256: <code class="hash">{{ .SHA256 }}</code></span>
-        <div class="evidence-preview blurred" tabindex="0" role="button" aria-label="Click to reveal evidence preview for {{ .Filename }}">
-          <a href="/evidence/{{ .ID }}" target="_blank" rel="noopener">View file</a>
-        </div>
+        {{ end }}
       </li>
       {{ end }}
     </ul>
     {{ else }}
-    <p>No evidence files uploaded.</p>
+    <p>No evidence provided.</p>
     {{ end }}
   </section>
 

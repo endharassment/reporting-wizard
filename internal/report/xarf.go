@@ -38,8 +38,9 @@ type XARFReportBody struct {
 // XARFEvidence represents a piece of evidence in X-ARF format.
 type XARFEvidence struct {
 	Description string `json:"Description"`
-	ContentType string `json:"ContentType"`
-	SHA256      string `json:"SHA256"`
+	ContentType string `json:"ContentType,omitempty"`
+	SHA256      string `json:"SHA256,omitempty"`
+	URL         string `json:"URL,omitempty"`
 	Content     string `json:"Content,omitempty"`
 }
 
@@ -82,12 +83,16 @@ func GenerateXARF(cfg XARFConfig, report *model.Report, infraResults []*model.In
 	for _, e := range evidence {
 		xe := XARFEvidence{
 			Description: e.Description,
-			ContentType: e.ContentType,
-			SHA256:      e.SHA256,
 		}
-		if e.SizeBytes <= maxInlineEvidenceBytes {
-			if content, found := evidenceContent[e.ID]; found {
-				xe.Content = content
+		if e.EvidenceURL != "" {
+			xe.URL = e.EvidenceURL
+		} else {
+			xe.ContentType = e.ContentType
+			xe.SHA256 = e.SHA256
+			if e.SizeBytes <= maxInlineEvidenceBytes {
+				if content, found := evidenceContent[e.ID]; found {
+					xe.Content = content
+				}
 			}
 		}
 		xarfEvidence = append(xarfEvidence, xe)

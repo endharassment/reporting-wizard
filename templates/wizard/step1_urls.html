@@ -11,6 +11,10 @@
   <h1>Step 1: Enter URLs</h1>
   <p>Enter the URLs of the abusive content, one per line. All URLs must be from the same domain.</p>
 
+  <div class="alert alert-danger" role="alert">
+    <strong>Stop:</strong> If the content involves child sexual abuse material (CSAM), do <em>not</em> use this tool. Report it immediately to the <a href="https://report.cybertip.org/" target="_blank" rel="noopener noreferrer">NCMEC CyberTipline</a>. For other federal cybercrimes or imminent threats, report to <a href="https://www.ic3.gov/" target="_blank" rel="noopener noreferrer">IC3.gov</a>.
+  </div>
+
   <form method="post" action="/wizard/step1">
     <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
 

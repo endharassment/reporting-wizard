@@ -21,11 +21,6 @@ type Store interface {
 	DeleteSession(ctx context.Context, id string) error
 	DeleteExpiredSessions(ctx context.Context) error
 
-	// Magic Links
-	CreateMagicLink(ctx context.Context, link *model.MagicLink) error
-	GetMagicLink(ctx context.Context, token string) (*model.MagicLink, error)
-	MarkMagicLinkUsed(ctx context.Context, token string) error
-
 	// Reports
 	CreateReport(ctx context.Context, report *model.Report) error
 	GetReport(ctx context.Context, id string) (*model.Report, error)
@@ -42,6 +37,10 @@ type Store interface {
 	CreateEvidence(ctx context.Context, evidence *model.Evidence) error
 	GetEvidence(ctx context.Context, id string) (*model.Evidence, error)
 	ListEvidenceByReport(ctx context.Context, reportID string) ([]*model.Evidence, error)
+
+	// URL Snapshots
+	CreateURLSnapshot(ctx context.Context, snapshot *model.URLSnapshot) error
+	ListURLSnapshotsByReport(ctx context.Context, reportID string) ([]*model.URLSnapshot, error)
 
 	// Outgoing Emails
 	CreateOutgoingEmail(ctx context.Context, email *model.OutgoingEmail) error

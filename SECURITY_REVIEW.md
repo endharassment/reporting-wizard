@@ -343,5 +343,14 @@
 6. **Add content safety validation** (done in `safety.go`).
 7. **Create Terms of Service** with reporter attestation.
 8. **Create Privacy Policy** with data retention schedule.
-9. **Fix magic link race condition** (atomic check-and-mark).
-10. **Add busy_timeout pragma** to SQLite connection string.
+9. ~~Fix magic link race condition~~ (removed: magic link auth removed in favor of Google OAuth only).
+10. **Add busy_timeout pragma** to SQLite connection string (done).
+
+## 9. Changes Since Initial Review
+
+- **Magic link auth removed**: Login now uses Google OAuth (and GitHub OAuth) only. This eliminates the magic link race condition (item 8 above), SendGrid quota abuse for auth, and token brute-forcing risks.
+- **Evidence architecture changed**: Users now provide URLs to their own cloud-hosted evidence (Google Drive, Dropbox, etc.) instead of uploading files. This eliminates: local blob storage, most of the content-type attack surface, disk exhaustion via large uploads, and the need for admin evidence download handlers. The `safety.go` file-upload validation code remains but is no longer in the critical path.
+- **CSAM/IC3/NCMEC disclaimers added**: Prominent notices on the home page, step 1, step 3, and footer directing users to report CSAM to NCMEC CyberTipline and federal cybercrimes to IC3.
+- **URL text snapshotting**: Best-effort text-only crawling of reported URLs for evidentiary purposes (via `internal/snapshot/`). Snapshots are stored as text, no binary content.
+- **Escalation engine wired up**: The background escalation worker is now started in `main.go`.
+- **SQLite busy_timeout**: Added `busy_timeout(5000)` pragma to the connection string.
