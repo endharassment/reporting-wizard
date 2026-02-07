@@ -114,7 +114,7 @@ func (s *Server) HandleWizardStep2(w http.ResponseWriter, r *http.Request) {
 	existing, _ := s.store.ListInfraResultsByReport(r.Context(), reportID)
 	if len(existing) == 0 {
 		// Run discovery.
-		results, err := s.discovery.Run(r.Context(), rpt.Domain)
+		disc, err := s.discovery.Run(r.Context(), rpt.Domain)
 		if err != nil {
 			log.Printf("ERROR: infra discovery for %s: %v", rpt.Domain, err)
 			s.render(w, r, "step2_infra.html", map[string]interface{}{
@@ -127,19 +127,26 @@ func (s *Server) HandleWizardStep2(w http.ResponseWriter, r *http.Request) {
 
 		// Store results.
 		now := time.Now().UTC()
-		for i := range results {
-			results[i].ID = uuid.New().String()
-			results[i].ReportID = reportID
-			results[i].CreatedAt = now
-			if err := s.store.CreateInfraResult(r.Context(), &results[i]); err != nil {
+		for i := range disc.InfraResults {
+			disc.InfraResults[i].ID = uuid.New().String()
+			disc.InfraResults[i].ReportID = reportID
+			disc.InfraResults[i].CreatedAt = now
+			if err := s.store.CreateInfraResult(r.Context(), &disc.InfraResults[i]); err != nil {
 				log.Printf("ERROR: store infra result: %v", err)
 			}
 		}
 
+		// Cache the full upstream graph for escalation.
+		for asn, upstreams := range disc.UpstreamGraph {
+			if err := s.store.UpsertUpstreamCache(r.Context(), asn, upstreams); err != nil {
+				log.Printf("ERROR: cache upstream for AS%d: %v", asn, err)
+			}
+		}
+
 		// Convert to pointers for template.
-		existing = make([]*model.InfraResult, len(results))
-		for i := range results {
-			existing[i] = &results[i]
+		existing = make([]*model.InfraResult, len(disc.InfraResults))
+		for i := range disc.InfraResults {
+			existing[i] = &disc.InfraResults[i]
 		}
 	}
 

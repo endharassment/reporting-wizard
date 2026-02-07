@@ -716,6 +716,48 @@ func (s *SQLiteStore) ListEmailRepliesByEmails(ctx context.Context, emailIDs []s
 	return result, rows.Err()
 }
 
+// --- Upstream Cache ---
+
+func (s *SQLiteStore) UpsertUpstreamCache(ctx context.Context, asn int, upstreams []int) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM upstream_cache WHERE asn = ?`, asn); err != nil {
+		return fmt.Errorf("delete stale upstreams for AS%d: %w", asn, err)
+	}
+
+	for _, upstream := range upstreams {
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO upstream_cache (asn, upstream_asn) VALUES (?, ?)`,
+			asn, upstream); err != nil {
+			return fmt.Errorf("insert upstream AS%d for AS%d: %w", upstream, asn, err)
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *SQLiteStore) GetUpstreamsForASN(ctx context.Context, asn int) ([]int, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT upstream_asn FROM upstream_cache WHERE asn = ? ORDER BY upstream_asn`, asn)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var upstreams []int
+	for rows.Next() {
+		var u int
+		if err := rows.Scan(&u); err != nil {
+			return nil, err
+		}
+		upstreams = append(upstreams, u)
+	}
+	return upstreams, rows.Err()
+}
+
 // --- Helpers ---
 
 func boolToInt(b bool) int {

@@ -575,18 +575,18 @@ func TestDiscoveryRun(t *testing.T) {
 				},
 			}
 
-			results, err := d.Run(context.Background(), tt.domain)
+			disc, err := d.Run(context.Background(), tt.domain)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("Discovery.Run() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantErr {
 				return
 			}
-			if len(results) != tt.wantCount {
-				t.Fatalf("Discovery.Run() got %d results, want %d", len(results), tt.wantCount)
+			if len(disc.InfraResults) != tt.wantCount {
+				t.Fatalf("Discovery.Run() got %d results, want %d", len(disc.InfraResults), tt.wantCount)
 			}
-			if tt.wantCloudflare != AnyCloudflare(results) {
-				t.Errorf("Discovery.Run() Cloudflare = %v, want %v", AnyCloudflare(results), tt.wantCloudflare)
+			if tt.wantCloudflare != AnyCloudflare(disc.InfraResults) {
+				t.Errorf("Discovery.Run() Cloudflare = %v, want %v", AnyCloudflare(disc.InfraResults), tt.wantCloudflare)
 			}
 		})
 	}
@@ -635,16 +635,16 @@ func TestDiscoveryRunFullPipeline(t *testing.T) {
 		},
 	}
 
-	results, err := d.Run(context.Background(), "example.com")
+	disc, err := d.Run(context.Background(), "example.com")
 	if err != nil {
 		t.Fatalf("Discovery.Run() unexpected error: %v", err)
 	}
 
-	if len(results) != 1 {
-		t.Fatalf("expected 1 result, got %d", len(results))
+	if len(disc.InfraResults) != 1 {
+		t.Fatalf("expected 1 result, got %d", len(disc.InfraResults))
 	}
 
-	r := results[0]
+	r := disc.InfraResults[0]
 	if r.IP != "93.184.216.34" {
 		t.Errorf("IP = %q, want %q", r.IP, "93.184.216.34")
 	}
@@ -668,5 +668,111 @@ func TestDiscoveryRunFullPipeline(t *testing.T) {
 	}
 	if len(r.UpstreamASNs) != 2 || r.UpstreamASNs[0] != 174 || r.UpstreamASNs[1] != 3356 {
 		t.Errorf("UpstreamASNs = %v, want [174 3356]", r.UpstreamASNs)
+	}
+}
+
+func TestWalkUpstreamChain(t *testing.T) {
+	tests := []struct {
+		name     string
+		seeds    []int
+		bgp      map[int][]int
+		bgpErrs  map[int]error
+		wantASNs []int // ASNs expected as keys in the graph
+	}{
+		{
+			name:  "linear chain terminates at Tier 1",
+			seeds: []int{65001},
+			bgp: map[int][]int{
+				65001: {56655},
+				56655: {174},
+				174:   {}, // Tier 1
+			},
+			wantASNs: []int{65001, 56655, 174},
+		},
+		{
+			name:  "diamond topology deduplicates",
+			seeds: []int{65001},
+			bgp: map[int][]int{
+				65001: {100, 200},
+				100:   {300},
+				200:   {300},
+				300:   {},
+			},
+			wantASNs: []int{65001, 100, 200, 300},
+		},
+		{
+			name:  "cycle detected and terminated",
+			seeds: []int{100},
+			bgp: map[int][]int{
+				100: {200},
+				200: {300},
+				300: {100}, // cycle back
+			},
+			wantASNs: []int{100, 200, 300},
+		},
+		{
+			name:  "multiple seeds with overlap",
+			seeds: []int{65001, 65002},
+			bgp: map[int][]int{
+				65001: {174},
+				65002: {174, 3356},
+				174:   {},
+				3356:  {},
+			},
+			wantASNs: []int{65001, 65002, 174, 3356},
+		},
+		{
+			name:  "BGP lookup failure is non-fatal",
+			seeds: []int{65001},
+			bgp: map[int][]int{
+				65001: {174, 3356},
+				174:   {}, // succeeds
+				// 3356 will fail
+			},
+			bgpErrs: map[int]error{
+				3356: net.ErrClosed,
+			},
+			wantASNs: []int{65001, 174, 3356},
+		},
+		{
+			name:     "empty seeds returns empty graph",
+			seeds:    []int{},
+			bgp:      map[int][]int{},
+			wantASNs: nil,
+		},
+		{
+			name:  "zero ASN in seeds is skipped",
+			seeds: []int{0, 65001},
+			bgp: map[int][]int{
+				65001: {},
+			},
+			wantASNs: []int{65001},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bgp := &mockBGPClient{results: tt.bgp, errs: tt.bgpErrs}
+			graph, err := WalkUpstreamChain(context.Background(), bgp, tt.seeds)
+			if err != nil {
+				t.Fatalf("WalkUpstreamChain() error = %v", err)
+			}
+
+			if tt.wantASNs == nil {
+				if len(graph) != 0 {
+					t.Errorf("expected empty graph, got %v", graph)
+				}
+				return
+			}
+
+			for _, asn := range tt.wantASNs {
+				if _, ok := graph[asn]; !ok {
+					t.Errorf("graph missing ASN %d; graph = %v", asn, graph)
+				}
+			}
+			if len(graph) != len(tt.wantASNs) {
+				t.Errorf("graph has %d entries, want %d; graph = %v", len(graph), len(tt.wantASNs), graph)
+			}
+		})
 	}
 }
