@@ -1,0 +1,129 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section class="wizard">
+  <div class="step-indicator" aria-label="Step 4 of 4">
+    <span class="step completed">1. URLs</span>
+    <span class="step completed">2. Infrastructure</span>
+    <span class="step completed">3. Evidence</span>
+    <span class="step active" aria-current="step">4. Review</span>
+  </div>
+
+  <h1>Step 4: Review &amp; Submit</h1>
+  <p>Please review the details of your report before submitting.</p>
+
+  <section class="review-section">
+    <h2>Domain &amp; URLs</h2>
+    <dl>
+      <dt>Domain</dt>
+      <dd>{{ .Report.Domain }}</dd>
+      <dt>URLs</dt>
+      <dd>
+        <ul>
+          {{ range .Report.URLs }}
+          <li><code>{{ . }}</code></li>
+          {{ end }}
+        </ul>
+      </dd>
+    </dl>
+  </section>
+
+  <section class="review-section">
+    <h2>Violation</h2>
+    <dl>
+      <dt>Type</dt>
+      <dd>{{ .Report.ViolationType }}</dd>
+      <dt>Description</dt>
+      <dd>{{ .Report.Description }}</dd>
+    </dl>
+  </section>
+
+  <section class="review-section">
+    <h2>Evidence</h2>
+    {{ if .Evidence }}
+    <ul class="evidence-list">
+      {{ range .Evidence }}
+      <li>
+        {{ if .EvidenceURL }}
+        <a href="{{ .EvidenceURL }}" target="_blank" rel="noopener noreferrer">{{ .EvidenceURL }}</a>
+        {{ if .DriveVerified }}
+        <span class="badge badge-verified" title="Verified via Google Drive API">Verified</span>
+        <br><span class="evidence-meta">{{ .DriveFileName }} &middot; {{ .DriveMimeType }}{{ if .DriveSize }} &middot; {{ .DriveSize }} bytes{{ end }}</span>
+        {{ else if .DriveFileID }}
+        <span class="badge badge-unverified" title="Google Drive link detected but metadata could not be verified">Unverified</span>
+        {{ end }}
+        {{ else }}
+        <span>{{ .Filename }} ({{ .ContentType }}, SHA-256: <code class="hash">{{ .SHA256 }}</code>)</span>
+        {{ end }}
+      </li>
+      {{ end }}
+    </ul>
+    {{ else }}
+    <p>No evidence provided.</p>
+    {{ end }}
+  </section>
+
+  {{ if .Snapshots }}
+  <section class="review-section">
+    <h2>URL Text Snapshots</h2>
+    <p class="form-help">We attempted to capture text-only snapshots of the reported URLs for evidentiary purposes.</p>
+    {{ range .Snapshots }}
+    <details>
+      <summary>
+        {{ .URL }}
+        {{ if .Error }}<span class="form-error">(fetch error)</span>{{ end }}
+      </summary>
+      {{ if .Error }}
+      <p class="form-error">Error: {{ .Error }}</p>
+      {{ else }}
+      <pre class="snapshot-text">{{ .TextContent }}</pre>
+      {{ end }}
+    </details>
+    {{ end }}
+  </section>
+  {{ end }}
+
+  <section class="review-section">
+    <h2>Abuse Contacts</h2>
+    <ul>
+      {{ range .AbuseContacts }}
+      <li>{{ . }}</li>
+      {{ end }}
+    </ul>
+  </section>
+
+  {{ if .EmailPreview }}
+  <section class="review-section">
+    <h2>Email Preview</h2>
+    <div class="email-preview">
+      <dl>
+        <dt>To</dt>
+        <dd>{{ .EmailPreview.Recipient }}</dd>
+        <dt>Subject</dt>
+        <dd>{{ .EmailPreview.Subject }}</dd>
+      </dl>
+      <pre class="email-body">{{ .EmailPreview.Body }}</pre>
+    </div>
+  </section>
+  {{ end }}
+
+  <div class="alert alert-warning" role="alert">
+    <strong>Important &mdash; please read before submitting:</strong>
+    <p>By submitting this report, you understand that:</p>
+    <ul>
+      <li>The hosting provider <strong>will forward</strong> this report &mdash; including your description, violation type, and evidence links &mdash; to the site operator.</li>
+      <li>Operators of abusive sites are known to <strong>retaliate</strong> by publicly posting abuse complaints and using them to direct further harassment at the complainant.</li>
+      <li>There is <strong>no expectation of privacy</strong> for abuse reports. Assume everything in this report will be seen by the people you are reporting.</li>
+    </ul>
+    <p>Your personal email address is not included in the outgoing report. Reports are sent on behalf of our organization.</p>
+  </div>
+
+  <form method="post" action="/wizard/step4/{{ .Report.ID }}/submit">
+    <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+    <p class="review-note">Your report will be reviewed by an admin before being sent to abuse contacts.</p>
+    <div class="form-actions">
+      <a href="/wizard/step3/{{ .Report.ID }}" class="btn btn-secondary">Back to Evidence</a>
+      <button type="submit" class="btn btn-primary">Submit for Admin Review</button>
+    </div>
+  </form>
+</section>
+{{ end }}

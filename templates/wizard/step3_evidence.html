@@ -1,0 +1,106 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section class="wizard">
+  <div class="step-indicator" aria-label="Step 3 of 4">
+    <span class="step completed">1. URLs</span>
+    <span class="step completed">2. Infrastructure</span>
+    <span class="step active" aria-current="step">3. Evidence</span>
+    <span class="step">4. Review</span>
+  </div>
+
+  <h1>Step 3: Provide Evidence</h1>
+  <p>Describe the violation and link to evidence you have uploaded to your own cloud storage (Google Drive, Dropbox, iCloud, etc.).</p>
+
+  <form method="post" action="/wizard/step3/{{ .Report.ID }}">
+    <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+
+    <div class="form-group">
+      <label for="violation_type">Violation Type</label>
+      <select id="violation_type" name="violation_type" required>
+        <option value="">-- Select a violation type --</option>
+        <option value="harassment"{{ if eq (string .Report.ViolationType) "harassment" }} selected{{ end }}>Harassment</option>
+        <option value="hate_speech"{{ if eq (string .Report.ViolationType) "hate_speech" }} selected{{ end }}>Hate Speech</option>
+        <option value="ncii"{{ if eq (string .Report.ViolationType) "ncii" }} selected{{ end }}>Non-Consensual Intimate Images (NCII)</option>
+        <option value="doxxing"{{ if eq (string .Report.ViolationType) "doxxing" }} selected{{ end }}>Doxxing</option>
+        <option value="copyvio"{{ if eq (string .Report.ViolationType) "copyvio" }} selected{{ end }}>Copyright / Likeness Violation</option>
+      </select>
+      {{ if .Errors.ViolationType }}
+      <span class="form-error" role="alert">{{ .Errors.ViolationType }}</span>
+      {{ end }}
+    </div>
+
+    <div id="ncii-warning" class="alert alert-warning" role="alert" style="display: none;">
+      <strong>Important:</strong> NCII reports <strong>must</strong> be filed by the person depicted in the content, or by their authorized legal representative. We file this report on your behalf &mdash; the hosting provider needs to know the complaint originates from the affected individual, not an unrelated third party. By selecting this category, you are confirming that you are the affected person or are authorized to act on their behalf.
+      <br><br><strong>If the content involves minors, this constitutes CSAM.</strong> Do <em>not</em> upload, screenshot, or redistribute it. Report it immediately to the <a href="https://report.cybertip.org/" target="_blank" rel="noopener noreferrer">NCMEC CyberTipline</a> and <a href="https://www.ic3.gov/" target="_blank" rel="noopener noreferrer">IC3</a>.
+    </div>
+
+    <div id="copyvio-warning" class="alert alert-warning" role="alert" style="display: none;">
+      <strong>Not a DMCA notice:</strong> We file <strong>Terms of Service abuse reports</strong> asking the hosting provider to enforce their acceptable use policies. We do <em>not</em> file DMCA takedown notices, which are a legal instrument that must be signed under penalty of perjury by the copyright holder or their authorized agent. If you need to send a DMCA takedown, you or your attorney must do so directly with the hosting provider.
+    </div>
+
+    <div class="form-group">
+      <label for="description">Description</label>
+      <textarea id="description" name="description" rows="5" required
+        placeholder="Describe the abusive content and its impact..."
+        aria-describedby="desc-help">{{ .Report.Description }}</textarea>
+      <small id="desc-help" class="form-help">Provide context about the abuse. This will be included in the report sent to hosting providers.</small>
+      {{ if .Errors.Description }}
+      <span class="form-error" role="alert">{{ .Errors.Description }}</span>
+      {{ end }}
+    </div>
+
+    <div class="form-group">
+      <label for="evidence_urls">Evidence Links (one per line)</label>
+      <textarea id="evidence_urls" name="evidence_urls" rows="4"
+        placeholder="https://drive.google.com/file/d/.../view?usp=sharing&#10;https://www.dropbox.com/s/.../screenshot.png?dl=0"
+        aria-describedby="evidence-help">{{ .EvidenceURLs }}</textarea>
+      <small id="evidence-help" class="form-help">Upload your screenshots and evidence files to your own cloud storage and paste the share links here. <strong>Google Drive links are recommended</strong> &mdash; if you signed in with Google, we can automatically verify that the files exist and pull metadata (name, type, size). For other services (Dropbox, iCloud, OneDrive), make sure the links are set to "anyone with the link can view."</small>
+      {{ if .Errors.EvidenceURLs }}
+      <span class="form-error" role="alert">{{ .Errors.EvidenceURLs }}</span>
+      {{ end }}
+    </div>
+
+    {{ if .Evidence }}
+    <h2>Previously Added Evidence</h2>
+    <ul class="evidence-list">
+      {{ range .Evidence }}
+      <li>
+        {{ if .EvidenceURL }}
+        <a href="{{ .EvidenceURL }}" target="_blank" rel="noopener noreferrer" class="evidence-url">{{ .EvidenceURL }}</a>
+        {{ if .DriveVerified }}
+        <span class="badge badge-verified" title="Verified via Google Drive API">Verified</span>
+        <span class="evidence-meta">{{ .DriveFileName }} &middot; {{ .DriveMimeType }}{{ if .DriveSize }} &middot; {{ .DriveSize }} bytes{{ end }}</span>
+        {{ else if .DriveFileID }}
+        <span class="badge badge-unverified" title="Google Drive link detected but not verified">Unverified</span>
+        {{ end }}
+        {{ else }}
+        <span class="evidence-filename">{{ .Filename }}</span>
+        {{ end }}
+        {{ if and .Description (not .DriveVerified) }}
+        <span class="evidence-meta">{{ .Description }}</span>
+        {{ end }}
+      </li>
+      {{ end }}
+    </ul>
+    {{ end }}
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Continue to Review</button>
+    </div>
+  </form>
+</section>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function() {
+    var select = document.getElementById('violation_type');
+    var nciiWarning = document.getElementById('ncii-warning');
+    var copyvioWarning = document.getElementById('copyvio-warning');
+    function checkViolationType() {
+      nciiWarning.style.display = select.value === 'ncii' ? 'block' : 'none';
+      copyvioWarning.style.display = select.value === 'copyvio' ? 'block' : 'none';
+    }
+    select.addEventListener('change', checkViolationType);
+    checkViolationType();
+  });
+</script>
+{{ end }}

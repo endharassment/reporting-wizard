@@ -1,0 +1,56 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section class="hero">
+  <h1>Report Abuse. Protect People.</h1>
+  <p>The End Harassment Reporting Wizard automates the process of filing abuse reports against hate sites and harassment campaigns with their hosting providers.</p>
+  <a href="/wizard/step1" class="btn btn-primary btn-lg">File a Report</a>
+</section>
+
+<section class="alert alert-warning" role="alert">
+  <h2>Understand the Risks Before Filing</h2>
+  <p>Hosting providers <strong>will forward your abuse report to the site operator</strong>. This is standard industry practice. The site operator will see the full report text, including your description of the violation and any evidence links you provide.</p>
+  <p>Operators of abusive sites are known to <strong>retaliate against complainants</strong> by publicly posting copies of abuse complaints and using them to direct further harassment at the reporter.</p>
+  <p><strong>There is no expectation of privacy for abuse reports.</strong> Assume that anything you include in your report will be seen by the people you are reporting.</p>
+  <p>Your personal email address is <em>not</em> included in outgoing reports &mdash; reports are sent on behalf of our organization. However, you should avoid including personally identifying details in your description or evidence unless you are comfortable with the site operator seeing them.</p>
+</section>
+
+<section class="alert alert-info" role="alert">
+  <h2>How We File Reports</h2>
+  <p>We file <strong>Terms of Service (ToS) abuse reports</strong> with hosting providers <strong>on your behalf and with your permission</strong>. Reports are sent under our organization's name, not yours.</p>
+  <p><strong>For NCII (non-consensual intimate images):</strong> You must be the person depicted in the content, or their authorized representative. We act on your behalf to request removal &mdash; the hosting provider needs to know the report comes from the affected person (or their agent), not an unrelated third party.</p>
+  <p><strong>For copyright violations:</strong> We file ToS-based abuse reports requesting removal of infringing content. <strong>We do not file DMCA takedown notices.</strong> A DMCA notice is a legal instrument that must be signed by the copyright holder or their authorized agent under penalty of perjury. If you need to file a DMCA takedown, you or your attorney must do so directly. Our reports ask the hosting provider to enforce their own acceptable use policies.</p>
+</section>
+
+<section class="alert alert-danger" role="alert">
+  <h2>Important: Illegal Content</h2>
+  <p>This tool files abuse reports with <strong>hosting providers</strong> regarding Terms of Service violations such as harassment, hate speech, doxxing, NCII, and copyright infringement.</p>
+  <p><strong>This tool is not appropriate for reporting illegal content that requires law enforcement action.</strong> In particular:</p>
+  <ul>
+    <li><strong>Child Sexual Abuse Material (CSAM):</strong> Report immediately to the <a href="https://report.cybertip.org/" target="_blank" rel="noopener noreferrer">NCMEC CyberTipline</a>. Do <em>not</em> upload, download, screenshot, or redistribute CSAM under any circumstances.</li>
+    <li><strong>Imminent threats of violence:</strong> Contact your local law enforcement and/or the <a href="https://www.ic3.gov/" target="_blank" rel="noopener noreferrer">FBI's Internet Crime Complaint Center (IC3)</a>.</li>
+    <li><strong>Other federal cybercrimes:</strong> File a report at <a href="https://www.ic3.gov/" target="_blank" rel="noopener noreferrer">IC3.gov</a>.</li>
+  </ul>
+</section>
+
+<section class="process-overview">
+  <h2>How It Works</h2>
+  <ol class="steps-overview">
+    <li>
+      <strong>Enter URLs</strong>
+      <p>Provide the URLs of the abusive content you want to report.</p>
+    </li>
+    <li>
+      <strong>Discover Infrastructure</strong>
+      <p>We automatically identify the hosting providers, IP addresses, and abuse contacts responsible for serving the content.</p>
+    </li>
+    <li>
+      <strong>Provide Evidence</strong>
+      <p>Link to screenshots or other evidence documenting the abuse, and classify the violation type.</p>
+    </li>
+    <li>
+      <strong>Review &amp; Submit</strong>
+      <p>Review the generated abuse report and submit it for admin approval. Once approved, it is sent to the appropriate abuse contacts.</p>
+    </li>
+  </ol>
+</section>
+{{ end }}

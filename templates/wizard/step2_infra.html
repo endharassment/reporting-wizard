@@ -1,0 +1,55 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section class="wizard">
+  <div class="step-indicator" aria-label="Step 2 of 4">
+    <span class="step completed">1. URLs</span>
+    <span class="step active" aria-current="step">2. Infrastructure</span>
+    <span class="step">3. Evidence</span>
+    <span class="step">4. Review</span>
+  </div>
+
+  <h1>Step 2: Infrastructure Results</h1>
+  <p>We discovered the following infrastructure for <strong>{{ .Report.Domain }}</strong>:</p>
+
+  <div class="table-responsive">
+    <table>
+      <caption>DNS and hosting information</caption>
+      <thead>
+        <tr>
+          <th scope="col">IP Address</th>
+          <th scope="col">Record</th>
+          <th scope="col">ASN</th>
+          <th scope="col">Host</th>
+          <th scope="col">Country</th>
+          <th scope="col">Abuse Contact</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{ range .InfraResults }}
+        <tr>
+          <td>{{ .IP }}</td>
+          <td>{{ .RecordType }}</td>
+          <td>AS{{ .ASN }}</td>
+          <td>{{ .ASNName }}</td>
+          <td>{{ .Country }}</td>
+          <td>{{ .AbuseContact }}</td>
+        </tr>
+        {{ end }}
+      </tbody>
+    </table>
+  </div>
+
+  {{ if .UpstreamASNs }}
+  <h2>Upstream Transit Providers</h2>
+  <ul class="upstream-list">
+    {{ range .UpstreamASNs }}
+    <li>AS{{ . }}</li>
+    {{ end }}
+  </ul>
+  {{ end }}
+
+  <div class="form-actions">
+    <a href="/wizard/step3/{{ .Report.ID }}" class="btn btn-primary">Continue to Evidence</a>
+  </div>
+</section>
+{{ end }}

@@ -1,0 +1,57 @@
+{{ define "layout" }}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ .CSRFToken }}">
+  <title>{{ if .Title }}{{ .Title }} - {{ end }}End Harassment Reporting Wizard</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/htmx.min.js" defer></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      document.body.addEventListener('htmx:configRequest', function(event) {
+        var token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+        event.detail.headers['X-CSRF-Token'] = token;
+      });
+    });
+  </script>
+</head>
+<body>
+  <header>
+    <nav aria-label="Main navigation">
+      <div class="nav-inner">
+        <a href="/" class="nav-brand">End Harassment</a>
+        <ul class="nav-links">
+          <li><a href="/">Home</a></li>
+          {{ if .User }}
+          <li><a href="/reports">My Reports</a></li>
+          {{ if .User.IsAdmin }}
+          <li><a href="/admin">Admin</a></li>
+          {{ end }}
+          <li><a href="/auth/logout">Logout</a></li>
+          {{ else }}
+          <li><a href="/auth/login">Login</a></li>
+          {{ end }}
+        </ul>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    {{ if .Flash }}
+    <div class="flash flash-{{ .Flash.Type }}" role="alert">
+      {{ .Flash.Message }}
+    </div>
+    {{ end }}
+
+    {{ template "content" . }}
+  </main>
+
+  <footer>
+    <p>End Harassment Reporting Wizard</p>
+    <p class="footer-legal">To report CSAM: <a href="https://report.cybertip.org/">NCMEC CyberTipline</a> | Federal cybercrimes: <a href="https://www.ic3.gov/">IC3.gov</a></p>
+  </footer>
+</body>
+</html>
+{{ end }}

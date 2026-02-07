@@ -1,0 +1,12 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section class="auth-page">
+  <h1>Sign In</h1>
+  <p>Sign in with your Google account to file or manage abuse reports.</p>
+
+  <div class="oauth-buttons">
+    <a href="/auth/google" class="btn btn-primary btn-block">Sign in with Google</a>
+    <a href="/auth/github" class="btn btn-secondary btn-block">Sign in with GitHub</a>
+  </div>
+</section>
+{{ end }}

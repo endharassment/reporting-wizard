@@ -1,0 +1,27 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section>
+  <h1>Admin Dashboard</h1>
+
+  <div class="dashboard-cards">
+    <div class="card">
+      <h2>{{ .Counts.PendingApproval }}</h2>
+      <p>Pending Approval</p>
+      <a href="/admin/queue">Review Queue</a>
+    </div>
+    <div class="card">
+      <h2>{{ .Counts.Sent }}</h2>
+      <p>Sent (Awaiting Response)</p>
+    </div>
+    <div class="card">
+      <h2>{{ .Counts.Escalating }}</h2>
+      <p>Escalating</p>
+    </div>
+    <div class="card">
+      <h2>{{ .Counts.CloudflarePending }}</h2>
+      <p>Cloudflare Pending</p>
+      <a href="/admin/cloudflare-pending">View</a>
+    </div>
+  </div>
+</section>
+{{ end }}
