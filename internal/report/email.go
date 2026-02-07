@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/endharassment/reporting-wizard/internal/model"
+	"github.com/google/uuid"
 	"github.com/sendgrid/sendgrid-go"
 	"github.com/sendgrid/sendgrid-go/helpers/mail"
 )
@@ -41,11 +42,13 @@ func ComposeEmail(cfg EmailConfig, report *model.Report, infraResults []*model.I
 		targetASN = infraResults[0].ASN
 	}
 
-	subject := fmt.Sprintf("Abuse Report: %s violation on %s", violationLabel(report.ViolationType), report.Domain)
+	emailID := uuid.New().String()
+	subject := fmt.Sprintf("Abuse Report: %s violation on %s [Ticket: %s]", violationLabel(report.ViolationType), report.Domain, emailID)
 
 	body := composeBody(cfg, report, infraResults, evidence)
 
 	return &model.OutgoingEmail{
+		ID:           emailID,
 		ReportID:     report.ID,
 		Recipient:    recipient,
 		RecipientOrg: recipientOrg,

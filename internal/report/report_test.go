@@ -18,7 +18,7 @@ import (
 )
 
 var testXARFConfig = XARFConfig{
-	ReporterOrg:          "End Harassment",
+	ReporterOrg:          "End Network Harassment Inc",
 	ReporterOrgDomain:    "endharassment.net",
 	ReporterContactEmail: "reports@endharassment.net",
 	ReporterContactName:  "Abuse Reports Team",
@@ -27,7 +27,7 @@ var testXARFConfig = XARFConfig{
 var testEmailConfig = EmailConfig{
 	XARF:           testXARFConfig,
 	FromAddress:    "noreply@endharassment.net",
-	FromName:       "End Harassment",
+	FromName:       "End Network Harassment Inc",
 	SandboxMode:    true,
 	SendGridAPIKey: "test-key",
 }
@@ -151,8 +151,8 @@ func TestGenerateXARF_ViolationTypes(t *testing.T) {
 			if len(xarf.Report.URLs) != 2 {
 				t.Errorf("URLs count = %d, want 2", len(xarf.Report.URLs))
 			}
-			if xarf.ReporterInfo.ReporterOrg != "End Harassment" {
-				t.Errorf("ReporterOrg = %q, want %q", xarf.ReporterInfo.ReporterOrg, "End Harassment")
+			if xarf.ReporterInfo.ReporterOrg != "End Network Harassment Inc" {
+				t.Errorf("ReporterOrg = %q, want %q", xarf.ReporterInfo.ReporterOrg, "End Network Harassment Inc")
 			}
 			if len(xarf.Evidence) != 1 {
 				t.Fatalf("Evidence count = %d, want 1", len(xarf.Evidence))
@@ -339,15 +339,15 @@ func TestHandleUpload_ValidationErrors(t *testing.T) {
 
 func TestComposeEmail(t *testing.T) {
 	tests := []struct {
-		name          string
-		violationType model.ViolationType
-		wantSubject   string
-		wantBodyParts []string
+		name                string
+		violationType       model.ViolationType
+		wantSubjectContains string
+		wantBodyParts       []string
 	}{
 		{
-			name:          "harassment report",
-			violationType: model.ViolationHarassment,
-			wantSubject:   "Abuse Report: harassment violation on example.com",
+			name:                "harassment report",
+			violationType:       model.ViolationHarassment,
+			wantSubjectContains: "Abuse Report: harassment violation on example.com",
 			wantBodyParts: []string{
 				"Dear Abuse Team",
 				"harassment violation",
@@ -358,18 +358,18 @@ func TestComposeEmail(t *testing.T) {
 			},
 		},
 		{
-			name:          "copyvio report",
-			violationType: model.ViolationCopyvio,
-			wantSubject:   "Abuse Report: copyright infringement violation on example.com",
+			name:                "copyvio report",
+			violationType:       model.ViolationCopyvio,
+			wantSubjectContains: "Abuse Report: copyright infringement violation on example.com",
 			wantBodyParts: []string{
 				"copyright infringement",
 				"example.com",
 			},
 		},
 		{
-			name:          "ncii report",
-			violationType: model.ViolationNCII,
-			wantSubject:   "Abuse Report: non-consensual intimate imagery (NCII) violation on example.com",
+			name:                "ncii report",
+			violationType:       model.ViolationNCII,
+			wantSubjectContains: "Abuse Report: non-consensual intimate imagery (NCII) violation on example.com",
 			wantBodyParts: []string{
 				"non-consensual intimate imagery",
 			},
@@ -388,8 +388,11 @@ func TestComposeEmail(t *testing.T) {
 				t.Fatalf("ComposeEmail() error = %v", err)
 			}
 
-			if email.EmailSubject != tt.wantSubject {
-				t.Errorf("Subject = %q, want %q", email.EmailSubject, tt.wantSubject)
+			if !strings.Contains(email.EmailSubject, tt.wantSubjectContains) {
+				t.Errorf("Subject = %q, want to contain %q", email.EmailSubject, tt.wantSubjectContains)
+			}
+			if !strings.Contains(email.EmailSubject, "[Ticket:") {
+				t.Errorf("Subject = %q, want to contain [Ticket:]", email.EmailSubject)
 			}
 
 			for _, part := range tt.wantBodyParts {

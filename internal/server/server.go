@@ -18,9 +18,9 @@ import (
 
 // Config holds server configuration.
 type Config struct {
-	ListenAddr  string
-	DBPath      string
-	SendGridKey string
+	ListenAddr     string
+	DBPath         string
+	SendGridKey    string
 	FromEmail      string
 	FromName       string
 	BaseURL        string
@@ -30,6 +30,9 @@ type Config struct {
 	GitHubSecret   string
 	EscalationDays int
 	SessionSecret  string
+	IMAPServer     string
+	IMAPUsername   string
+	IMAPPassword   string
 }
 
 // Snapshotter defines the interface for crawling and snapshotting URLs.
@@ -73,7 +76,7 @@ func NewServer(cfg Config, s store.Store, templatesFS fs.FS, staticFS fs.FS) (*S
 
 	emailCfg := report.EmailConfig{
 		XARF: report.XARFConfig{
-			ReporterOrg:          "End Harassment",
+			ReporterOrg:          "End Network Harassment Inc",
 			ReporterOrgDomain:    extractDomain(cfg.BaseURL),
 			ReporterContactEmail: cfg.FromEmail,
 			ReporterContactName:  cfg.FromName,
@@ -175,6 +178,10 @@ func (s *Server) routes() chi.Router {
 		r.Get("/admin/emails/{emailID}", ah.HandleEmailPreview)
 		r.Post("/admin/emails/{emailID}/approve", ah.HandleEmailApprove)
 		r.Post("/admin/emails/{emailID}/reject", ah.HandleEmailReject)
+		r.Get("/admin/evidence/{evidenceID}", ah.HandleAdminEvidenceDownload)
+		r.Get("/admin/users", ah.HandleListUsers)
+		r.Post("/admin/users/{userID}/ban", ah.HandleBanUser)
+		r.Post("/admin/users/{userID}/report-abuse", ah.HandleReportAbuse)
 	})
 
 	return r

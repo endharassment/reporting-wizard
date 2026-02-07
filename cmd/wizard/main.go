@@ -14,6 +14,7 @@ import (
 	"time"
 
 	wizard "github.com/endharassment/reporting-wizard"
+	"github.com/endharassment/reporting-wizard/internal/email"
 	"github.com/endharassment/reporting-wizard/internal/escalation"
 	"github.com/endharassment/reporting-wizard/internal/infra"
 	"github.com/endharassment/reporting-wizard/internal/server"
@@ -60,7 +61,7 @@ func main() {
 		DBPath:         *dbPath,
 		SendGridKey:    os.Getenv("WIZARD_SENDGRID_KEY"),
 		FromEmail:      envOr("WIZARD_FROM_EMAIL", "reports@endharassment.net"),
-		FromName:       envOr("WIZARD_FROM_NAME", "End Harassment"),
+		FromName:       envOr("WIZARD_FROM_NAME", "End Network Harassment Inc"),
 		BaseURL:        baseURL,
 		GoogleClientID: os.Getenv("WIZARD_GOOGLE_CLIENT_ID"),
 		GoogleSecret:   os.Getenv("WIZARD_GOOGLE_SECRET"),
@@ -68,6 +69,9 @@ func main() {
 		GitHubSecret:   os.Getenv("WIZARD_GITHUB_SECRET"),
 		EscalationDays: 14,
 		SessionSecret:  sessionSecret,
+		IMAPServer:     os.Getenv("WIZARD_IMAP_SERVER"),
+		IMAPUsername:   os.Getenv("WIZARD_IMAP_USERNAME"),
+		IMAPPassword:   os.Getenv("WIZARD_IMAP_PASSWORD"),
 	}
 
 	srv, err := server.NewServer(cfg, db, tmplFS, stFS)
@@ -93,6 +97,28 @@ func main() {
 		}
 	}()
 	log.Println("Escalation engine started")
+
+	// Start email reply fetcher.
+	if cfg.IMAPServer != "" {
+		imapCfg := email.IMAPConfig{
+			Server:   cfg.IMAPServer,
+			Username: cfg.IMAPUsername,
+			Password: cfg.IMAPPassword,
+		}
+		go func() {
+			ticker := time.NewTicker(5 * time.Minute)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					email.FetchAndProcessEmails(imapCfg, db)
+				}
+			}
+		}()
+		log.Println("Email reply fetcher started")
+	}
 
 	httpSrv := &http.Server{
 		Addr:    *listenAddr,

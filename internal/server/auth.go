@@ -61,6 +61,17 @@ func (s *Server) SessionMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		if user.Banned {
+			http.SetCookie(w, &http.Cookie{
+				Name:   sessionCookieName,
+				Value:  "",
+				Path:   "/",
+				MaxAge: -1,
+			})
+			http.Error(w, "Forbidden: Your account has been suspended.", http.StatusForbidden)
+			return
+		}
+
 		r = r.WithContext(withUser(r.Context(), user))
 		next.ServeHTTP(w, r)
 	})
