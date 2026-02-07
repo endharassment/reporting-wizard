@@ -354,3 +354,35 @@
 - **URL text snapshotting**: Best-effort text-only crawling of reported URLs for evidentiary purposes (via `internal/snapshot/`). Snapshots are stored as text, no binary content.
 - **Escalation engine wired up**: The background escalation worker is now started in `main.go`.
 - **SQLite busy_timeout**: Added `busy_timeout(5000)` pragma to the connection string.
+- **Google Drive metadata verification**: When users provide Google Drive evidence links, the app verifies file existence and pulls metadata (name, type, size) via the Drive API using the reporter's OAuth token (`drive.metadata.readonly` scope). Tokens are stored encrypted-at-rest in SQLite and refreshed automatically.
+- **Retaliation risk warnings (duty of care)**: Prominent warnings on the home page, wizard step 1, and step 4 (before submit) that hosting providers will forward reports to site operators, who may retaliate by publishing complaints. No expectation of privacy for abuse reports.
+- **NCII identity requirement**: NCII reports must be filed by the affected person or their authorized representative. This is stated in the step 3 NCII warning and in the outgoing email body.
+- **DMCA distinction**: Outgoing copyright emails now explicitly state they are ToS-based abuse reports, not DMCA takedown notices. UI warns users that DMCA notices must be filed separately by the copyright holder or their agent.
+- **Report authority clarification**: Outgoing emails now state reports are filed "on behalf of an affected individual" and request action under the provider's acceptable use policy.
+- **Session secret hardening**: The app now refuses to start with HTTPS (`WIZARD_BASE_URL`) if `WIZARD_SESSION_SECRET` is not set or is the old default. In local development (HTTP), a warning is logged.
+- **Logout cookie Secure flag**: The logout cookie-clearing response now sets the `Secure` flag consistently with the session cookie.
+- **Vestigial evidence directory removed**: The `evidence/` directory (from the old file-upload design) has been removed.
+- **`EvidenceDir` config field removed**: The `Config.EvidenceDir` field has been removed from the server config since evidence is now URL-based.
+
+### Updated Findings Summary
+
+| # | Finding | Severity | Status |
+|---|---------|----------|--------|
+| 1 | False report weaponization | HIGH | Partially mitigated (admin queue + rate limits) |
+| 2 | CSAM handling and NCMEC reporting | CRITICAL | Mitigated: disclaimers redirect to NCMEC/IC3; no file storage eliminates most exposure |
+| 3 | No rate limiting | HIGH | **Resolved** (`ratelimit.go`) |
+| 4 | No CSRF protection | HIGH | **Resolved** (`middleware.go`) |
+| 5 | No security headers | MEDIUM | **Resolved** (`middleware.go`) |
+| 6 | `image/*` wildcard allows SVG XSS | MEDIUM | **Resolved** (`safety.go`); also moot since no file uploads |
+| 7 | No filename sanitization | MEDIUM | **Resolved** (`safety.go`) |
+| 8 | Magic link not atomically single-use | MEDIUM | **Resolved** (magic links removed entirely) |
+| 9 | No per-report evidence size cap | HIGH | **Resolved** (no file uploads; evidence is URL-based) |
+| 10 | BGP client has no connection timeout | MEDIUM | Needs fix |
+| 11 | No GDPR compliance | HIGH | Needs policy and implementation |
+| 12 | No evidence retention policy | MEDIUM | Needs policy (simplified: no files stored, only URLs and metadata) |
+| 13 | Email reputation not protected | HIGH | Needs SendGrid configuration (SPF/DKIM/DMARC) |
+| 14 | No request body size limits | MEDIUM | Reduced risk (no file uploads), but form body limits still needed |
+| 15 | No busy timeout on SQLite | LOW | **Resolved** |
+| 16 | Admin content exposure | HIGH | Reduced (admins click external links rather than viewing hosted files) |
+| 17 | Default session secret | MEDIUM | **Resolved** (fail-fast in production) |
+| 18 | Logout cookie missing Secure flag | LOW | **Resolved** |

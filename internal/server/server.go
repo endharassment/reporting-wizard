@@ -18,10 +18,9 @@ import (
 
 // Config holds server configuration.
 type Config struct {
-	ListenAddr     string
-	DBPath         string
-	EvidenceDir    string
-	SendGridKey    string
+	ListenAddr  string
+	DBPath      string
+	SendGridKey string
 	FromEmail      string
 	FromName       string
 	BaseURL        string

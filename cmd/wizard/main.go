@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -43,19 +44,30 @@ func main() {
 		log.Fatalf("Failed to create static sub-FS: %v", err)
 	}
 
+	baseURL := envOr("WIZARD_BASE_URL", "http://localhost:8080")
+	sessionSecret := os.Getenv("WIZARD_SESSION_SECRET")
+	if sessionSecret == "" || sessionSecret == "change-me-in-production" {
+		if strings.HasPrefix(baseURL, "https://") {
+			log.Fatal("WIZARD_SESSION_SECRET must be set to a strong random value in production (try: openssl rand -hex 32)")
+		}
+		// Allow an insecure default for local development only.
+		log.Println("WARNING: using insecure default session secret -- set WIZARD_SESSION_SECRET for production")
+		sessionSecret = "insecure-dev-only-session-secret-do-not-use"
+	}
+
 	cfg := server.Config{
 		ListenAddr:     *listenAddr,
 		DBPath:         *dbPath,
 		SendGridKey:    os.Getenv("WIZARD_SENDGRID_KEY"),
 		FromEmail:      envOr("WIZARD_FROM_EMAIL", "reports@endharassment.net"),
 		FromName:       envOr("WIZARD_FROM_NAME", "End Harassment"),
-		BaseURL:        envOr("WIZARD_BASE_URL", "http://localhost:8080"),
+		BaseURL:        baseURL,
 		GoogleClientID: os.Getenv("WIZARD_GOOGLE_CLIENT_ID"),
 		GoogleSecret:   os.Getenv("WIZARD_GOOGLE_SECRET"),
 		GitHubClientID: os.Getenv("WIZARD_GITHUB_CLIENT_ID"),
 		GitHubSecret:   os.Getenv("WIZARD_GITHUB_SECRET"),
 		EscalationDays: 14,
-		SessionSecret:  envOr("WIZARD_SESSION_SECRET", "change-me-in-production"),
+		SessionSecret:  sessionSecret,
 	}
 
 	srv, err := server.NewServer(cfg, db, tmplFS, stFS)

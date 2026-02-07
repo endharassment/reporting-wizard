@@ -108,6 +108,7 @@ func (s *Server) HandleLogout(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
+		Secure:   strings.HasPrefix(s.config.BaseURL, "https"),
 	})
 
 	http.Redirect(w, r, "/", http.StatusFound)
