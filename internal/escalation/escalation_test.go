@@ -22,6 +22,7 @@ type mockStore struct {
 	outgoingEmails map[string]*model.OutgoingEmail
 	emailReplies   map[string][]*model.EmailReply // keyed by outgoing email ID
 	dueEmails      []*model.OutgoingEmail
+	upstreamCache  map[int][]int // ASN -> upstream ASNs
 }
 
 func newMockStore() *mockStore {
@@ -30,6 +31,7 @@ func newMockStore() *mockStore {
 		infraResults:   make(map[string][]*model.InfraResult),
 		outgoingEmails: make(map[string]*model.OutgoingEmail),
 		emailReplies:   make(map[string][]*model.EmailReply),
+		upstreamCache:  make(map[int][]int),
 	}
 }
 
@@ -135,13 +137,14 @@ func (m *mockStore) ListEmailsByReport(_ context.Context, reportID string) ([]*m
 	return result, nil
 }
 
-// createdEscalations returns all emails created with type "escalation".
+// createdEscalations returns escalation emails created during the test
+// (status pending_approval), excluding pre-existing due emails (status sent).
 func (m *mockStore) createdEscalations() []*model.OutgoingEmail {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var result []*model.OutgoingEmail
 	for _, e := range m.outgoingEmails {
-		if e.EmailType == model.EmailTypeEscalation {
+		if e.EmailType == model.EmailTypeEscalation && e.Status == model.EmailPendingApproval {
 			result = append(result, e)
 		}
 	}
@@ -218,6 +221,19 @@ func (m *mockStore) ListAllRepliesByReport(context.Context, string) (map[string]
 	panic("not implemented")
 }
 
+func (m *mockStore) UpsertUpstreamCache(_ context.Context, asn int, upstreams []int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.upstreamCache[asn] = upstreams
+	return nil
+}
+
+func (m *mockStore) GetUpstreamsForASN(_ context.Context, asn int) ([]int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.upstreamCache[asn], nil
+}
+
 // mockAbuseContactLookup maps ASN -> abuse contact email.
 type mockAbuseContactLookup struct {
 	contacts map[int]string
@@ -249,7 +265,7 @@ func TestCheckAndEscalate(t *testing.T) {
 		name                string
 		dueEmails           []*model.OutgoingEmail
 		reports             map[string]*model.Report
-		infraResults        map[string][]*model.InfraResult
+		upstreamCache       map[int][]int // ASN -> upstream ASNs
 		abuseContacts       map[int]string
 		wantEscalationCount int
 		wantOriginalNotes   string // expected ResponseNotes on the original email
@@ -279,17 +295,8 @@ func TestCheckAndEscalate(t *testing.T) {
 					Description:   "Harassment content",
 				},
 			},
-			infraResults: map[string][]*model.InfraResult{
-				"report-1": {
-					{
-						ID:           "infra-1",
-						ReportID:     "report-1",
-						IP:           "198.51.100.1",
-						ASN:          65001,
-						ASNName:      "HOSTING-EXAMPLE",
-						UpstreamASNs: []int{174, 3356},
-					},
-				},
+			upstreamCache: map[int][]int{
+				65001: {174, 3356},
 			},
 			abuseContacts: map[int]string{
 				174:  "abuse@cogent.net",
@@ -302,7 +309,7 @@ func TestCheckAndEscalate(t *testing.T) {
 			name:                "email not yet due is not returned by store",
 			dueEmails:           []*model.OutgoingEmail{},
 			reports:             map[string]*model.Report{},
-			infraResults:        map[string][]*model.InfraResult{},
+			upstreamCache:       map[int][]int{},
 			abuseContacts:       map[int]string{},
 			wantEscalationCount: 0,
 		},
@@ -329,7 +336,7 @@ func TestCheckAndEscalate(t *testing.T) {
 					Domain: "bad.example.com",
 				},
 			},
-			infraResults:        map[string][]*model.InfraResult{},
+			upstreamCache:       map[int][]int{},
 			abuseContacts:       map[int]string{},
 			wantEscalationCount: 0,
 		},
@@ -358,37 +365,19 @@ func TestCheckAndEscalate(t *testing.T) {
 					Description:   "Doxxing content",
 				},
 			},
-			infraResults: map[string][]*model.InfraResult{
-				"report-3": {
-					{
-						ID:           "infra-1",
-						ReportID:     "report-3",
-						IP:           "198.51.100.1",
-						ASN:          65001,
-						ASNName:      "HOSTING-EXAMPLE",
-						UpstreamASNs: []int{174, 3356},
-					},
-					{
-						ID:           "infra-2",
-						ReportID:     "report-3",
-						IP:           "198.51.100.2",
-						ASN:          65002,
-						ASNName:      "HOSTING-TWO",
-						UpstreamASNs: []int{3356, 6939},
-					},
-				},
+			upstreamCache: map[int][]int{
+				65001: {174, 3356, 6939},
 			},
 			abuseContacts: map[int]string{
 				174:  "abuse@cogent.net",
 				3356: "abuse@lumen.com",
 				6939: "abuse@he.net",
 			},
-			// 3356 appears twice but should only produce one escalation email
 			wantEscalationCount: 3,
 			wantOriginalNotes:   "escalated",
 		},
 		{
-			name: "duplicate abuse contacts across ASNs are deduplicated",
+			name: "duplicate abuse contacts across ASNs are deduplicated within round",
 			dueEmails: []*model.OutgoingEmail{
 				{
 					ID:            "email-4",
@@ -412,16 +401,8 @@ func TestCheckAndEscalate(t *testing.T) {
 					Description:   "Harassment content",
 				},
 			},
-			infraResults: map[string][]*model.InfraResult{
-				"report-4": {
-					{
-						ID:           "infra-1",
-						ReportID:     "report-4",
-						IP:           "198.51.100.1",
-						ASN:          65001,
-						UpstreamASNs: []int{174, 3356},
-					},
-				},
+			upstreamCache: map[int][]int{
+				65001: {174, 3356},
 			},
 			abuseContacts: map[int]string{
 				// Both ASNs resolve to the same abuse contact
@@ -432,12 +413,127 @@ func TestCheckAndEscalate(t *testing.T) {
 			wantOriginalNotes:   "escalated",
 		},
 		{
+			name: "Tier 1 ASN with no upstreams produces zero escalations",
+			dueEmails: []*model.OutgoingEmail{
+				{
+					ID:            "email-5",
+					ReportID:      "report-5",
+					Recipient:     "abuse@cogent.net",
+					TargetASN:     174,
+					EmailType:     model.EmailTypeEscalation,
+					Status:        model.EmailSent,
+					SentAt:        &sentAt,
+					EscalateAfter: &pastDate,
+					CreatedAt:     pastDate,
+				},
+			},
+			reports: map[string]*model.Report{
+				"report-5": {
+					ID:     "report-5",
+					Domain: "bad.example.com",
+				},
+			},
+			upstreamCache: map[int][]int{
+				174: {}, // Tier 1 — no upstreams
+			},
+			abuseContacts:       map[int]string{},
+			wantEscalationCount: 0,
+			wantOriginalNotes:   "escalated",
+		},
+		{
 			name:                "escalate_after in future is unused because store already filters",
 			dueEmails:           []*model.OutgoingEmail{},
 			reports:             map[string]*model.Report{},
-			infraResults:        map[string][]*model.InfraResult{},
+			upstreamCache:       map[int][]int{},
 			abuseContacts:       map[int]string{},
 			wantEscalationCount: 0,
+		},
+		{
+			name: "recursive: escalation email to AS56655 escalates to AS56655 upstreams",
+			dueEmails: []*model.OutgoingEmail{
+				{
+					ID:            "esc-56655",
+					ReportID:      "report-6",
+					ParentEmailID: "initial-email",
+					Recipient:     "abuse@56655.example.com",
+					TargetASN:     56655,
+					EmailType:     model.EmailTypeEscalation,
+					Status:        model.EmailSent,
+					SentAt:        &sentAt,
+					EscalateAfter: &pastDate,
+					CreatedAt:     pastDate,
+				},
+			},
+			reports: map[string]*model.Report{
+				"report-6": {
+					ID:            "report-6",
+					Domain:        "kiwifarms.example.com",
+					URLs:          []string{"https://kiwifarms.example.com/page"},
+					ViolationType: model.ViolationHarassment,
+					Description:   "Harassment content",
+				},
+			},
+			upstreamCache: map[int][]int{
+				56655: {174, 3356},
+				174:   {}, // Tier 1
+				3356:  {}, // Tier 1
+			},
+			abuseContacts: map[int]string{
+				174:  "abuse@cogent.net",
+				3356: "abuse@lumen.com",
+			},
+			wantEscalationCount: 2,
+			wantOriginalNotes:   "escalated",
+		},
+		{
+			name: "no cross-round dedup: two downstreams sharing upstream each produce escalation",
+			dueEmails: []*model.OutgoingEmail{
+				{
+					ID:            "esc-56655-r7",
+					ReportID:      "report-7",
+					ParentEmailID: "initial-email-r7",
+					Recipient:     "abuse@56655.example.com",
+					TargetASN:     56655,
+					EmailType:     model.EmailTypeEscalation,
+					Status:        model.EmailSent,
+					SentAt:        &sentAt,
+					EscalateAfter: &pastDate,
+					CreatedAt:     pastDate,
+				},
+				{
+					ID:            "esc-1002-r7",
+					ReportID:      "report-7",
+					ParentEmailID: "initial-email-r7",
+					Recipient:     "abuse@1002.example.com",
+					TargetASN:     1002,
+					EmailType:     model.EmailTypeEscalation,
+					Status:        model.EmailSent,
+					SentAt:        &sentAt,
+					EscalateAfter: &pastDate,
+					CreatedAt:     pastDate,
+				},
+			},
+			reports: map[string]*model.Report{
+				"report-7": {
+					ID:            "report-7",
+					Domain:        "kiwifarms.example.com",
+					URLs:          []string{"https://kiwifarms.example.com/page"},
+					ViolationType: model.ViolationHarassment,
+					Description:   "Harassment content",
+				},
+			},
+			upstreamCache: map[int][]int{
+				56655: {174},
+				1002:  {174},
+				174:   {}, // Tier 1
+			},
+			abuseContacts: map[int]string{
+				174: "abuse@cogent.net",
+			},
+			// Both AS56655 and AS1002 escalate to AS174 independently.
+			// No dedup: AS174 gets 2 separate escalation emails.
+			wantEscalationCount: 2,
+			wantOriginalNotes:   "escalated",
 		},
 	}
 
@@ -446,7 +542,7 @@ func TestCheckAndEscalate(t *testing.T) {
 			s := newMockStore()
 			s.dueEmails = tt.dueEmails
 			s.reports = tt.reports
-			s.infraResults = tt.infraResults
+			s.upstreamCache = tt.upstreamCache
 
 			// Also store the due emails so UpdateOutgoingEmail works.
 			for _, e := range tt.dueEmails {
@@ -511,16 +607,7 @@ func TestEscalateNow(t *testing.T) {
 		ViolationType: model.ViolationHarassment,
 		Description:   "Harassment content",
 	}
-	s.infraResults["report-1"] = []*model.InfraResult{
-		{
-			ID:           "infra-1",
-			ReportID:     "report-1",
-			IP:           "198.51.100.1",
-			ASN:          65001,
-			ASNName:      "HOSTING-EXAMPLE",
-			UpstreamASNs: []int{174},
-		},
-	}
+	s.upstreamCache[65001] = []int{174}
 
 	email := &model.OutgoingEmail{
 		ID:            "email-esc-now",
@@ -579,16 +666,7 @@ func TestEscalationBodyContainsContactHistory(t *testing.T) {
 		ViolationType: model.ViolationHarassment,
 		Description:   "Harassment content",
 	}
-	s.infraResults["report-1"] = []*model.InfraResult{
-		{
-			ID:           "infra-1",
-			ReportID:     "report-1",
-			IP:           "198.51.100.1",
-			ASN:          65001,
-			ASNName:      "HOSTING-EXAMPLE",
-			UpstreamASNs: []int{174},
-		},
-	}
+	s.upstreamCache[174] = []int{3356}
 
 	// Initial email that was sent and received a reply.
 	initialEmail := &model.OutgoingEmail{
@@ -636,7 +714,7 @@ func TestEscalationBodyContainsContactHistory(t *testing.T) {
 	s.dueEmails = []*model.OutgoingEmail{firstEscEmail}
 
 	ac := &mockAbuseContactLookup{contacts: map[int]string{
-		174: "abuse@cogent.net",
+		3356: "abuse@lumen.com",
 	}}
 	engine := NewEngine(s, ac, 7, testLogger())
 
@@ -691,16 +769,7 @@ func TestEscalationBodyContainsPeerNotification(t *testing.T) {
 		ViolationType: model.ViolationHarassment,
 		Description:   "Harassment content",
 	}
-	s.infraResults["report-1"] = []*model.InfraResult{
-		{
-			ID:           "infra-1",
-			ReportID:     "report-1",
-			IP:           "198.51.100.1",
-			ASN:          65001,
-			ASNName:      "HOSTING-EXAMPLE",
-			UpstreamASNs: []int{174, 3356, 6939},
-		},
-	}
+	s.upstreamCache[65001] = []int{174, 3356, 6939}
 
 	email := &model.OutgoingEmail{
 		ID:           "email-peer",
@@ -764,16 +833,7 @@ func TestEscalationBodyContainsBoilerplate(t *testing.T) {
 		ViolationType: model.ViolationHarassment,
 		Description:   "Harassment content",
 	}
-	s.infraResults["report-1"] = []*model.InfraResult{
-		{
-			ID:           "infra-1",
-			ReportID:     "report-1",
-			IP:           "198.51.100.1",
-			ASN:          65001,
-			ASNName:      "HOSTING-EXAMPLE",
-			UpstreamASNs: []int{174},
-		},
-	}
+	s.upstreamCache[65001] = []int{174}
 
 	email := &model.OutgoingEmail{
 		ID:           "email-bp",

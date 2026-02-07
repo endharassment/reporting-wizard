@@ -63,4 +63,8 @@ type Store interface {
 	GetEmailChain(ctx context.Context, emailID string) ([]*model.OutgoingEmail, error)
 	ListAllRepliesByReport(ctx context.Context, reportID string) (map[string][]*model.EmailReply, error)
 	ListEmailRepliesByEmails(ctx context.Context, emailIDs []string) (map[string][]*model.EmailReply, error)
+
+	// Upstream Cache (recursive BGP upstream chain)
+	UpsertUpstreamCache(ctx context.Context, asn int, upstreams []int) error
+	GetUpstreamsForASN(ctx context.Context, asn int) ([]int, error)
 }

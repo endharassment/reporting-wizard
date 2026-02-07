@@ -131,16 +131,29 @@ func (e *Engine) checkAndEscalate(ctx context.Context) {
 }
 
 // escalateEmail processes a single email due for escalation.
-// It returns the number of escalation emails created.
+// It looks up the TARGET ASN's upstreams from the upstream cache (not the
+// report's infra_results), so escalation works recursively: an escalation
+// email to AS56655 that times out will escalate to AS56655's upstreams.
+//
+// Each downstream's failure to act is a separate complaint — no cross-round
+// deduplication. If AS56655 and AS1002 both ignore us and both have AS174
+// as upstream, AS174 gets two escalation emails (one per downstream).
 func (e *Engine) escalateEmail(ctx context.Context, email *model.OutgoingEmail, now time.Time) (int, error) {
 	report, err := e.store.GetReport(ctx, email.ReportID)
 	if err != nil {
 		return 0, fmt.Errorf("getting report %s: %w", email.ReportID, err)
 	}
 
-	infraResults, err := e.store.ListInfraResultsByReport(ctx, email.ReportID)
-	if err != nil {
-		return 0, fmt.Errorf("listing infra results for report %s: %w", email.ReportID, err)
+	if email.TargetASN == 0 {
+		e.logger.Warn("email has no target ASN, cannot escalate",
+			"email_id", email.ID,
+			"report_id", email.ReportID,
+		)
+		email.ResponseNotes = "escalated"
+		if err := e.store.UpdateOutgoingEmail(ctx, email); err != nil {
+			return 0, fmt.Errorf("updating response_notes for email %s: %w", email.ID, err)
+		}
+		return 0, nil
 	}
 
 	// Get the full email chain for contact history.
@@ -169,16 +182,15 @@ func (e *Engine) escalateEmail(ctx context.Context, email *model.OutgoingEmail, 
 		domainInfo = e.boilerplate.Lookup(report.Domain)
 	}
 
-	// Collect unique upstream ASNs across all infra results.
-	upstreamASNs := make(map[int]bool)
-	for _, ir := range infraResults {
-		for _, asn := range ir.UpstreamASNs {
-			upstreamASNs[asn] = true
-		}
+	// Look up the target ASN's upstreams from the recursive cache.
+	upstreamASNs, err := e.store.GetUpstreamsForASN(ctx, email.TargetASN)
+	if err != nil {
+		return 0, fmt.Errorf("looking up upstreams for AS%d: %w", email.TargetASN, err)
 	}
 
 	if len(upstreamASNs) == 0 {
-		e.logger.Warn("no upstream ASNs found for escalation",
+		e.logger.Info("no upstream ASNs for target (Tier 1 or uncached)",
+			"target_asn", email.TargetASN,
 			"email_id", email.ID,
 			"report_id", email.ReportID,
 		)
@@ -188,7 +200,7 @@ func (e *Engine) escalateEmail(ctx context.Context, email *model.OutgoingEmail, 
 	var targets []upstreamTarget
 	seenContacts := make(map[string]bool)
 
-	for asn := range upstreamASNs {
+	for _, asn := range upstreamASNs {
 		abuseContact, err := e.abuseContact.LookupAbuseContactByASN(ctx, asn)
 		if err != nil {
 			e.logger.Error("looking up abuse contact for upstream ASN",

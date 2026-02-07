@@ -329,18 +329,27 @@ func (h *AdminHandler) HandleSetOriginIP(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Run discovery using the origin IP directly.
-	results, err := h.discovery.Run(r.Context(), rpt.Domain)
+	disc, err := h.discovery.Run(r.Context(), rpt.Domain)
 	if err != nil {
 		log.Printf("WARN: re-discovery for %s failed: %v", rpt.Domain, err)
 	}
 
-	now := time.Now().UTC()
-	for i := range results {
-		results[i].ID = uuid.New().String()
-		results[i].ReportID = reportID
-		results[i].CreatedAt = now
-		if err := h.store.CreateInfraResult(r.Context(), &results[i]); err != nil {
-			log.Printf("ERROR: store infra result: %v", err)
+	if disc != nil {
+		now := time.Now().UTC()
+		for i := range disc.InfraResults {
+			disc.InfraResults[i].ID = uuid.New().String()
+			disc.InfraResults[i].ReportID = reportID
+			disc.InfraResults[i].CreatedAt = now
+			if err := h.store.CreateInfraResult(r.Context(), &disc.InfraResults[i]); err != nil {
+				log.Printf("ERROR: store infra result: %v", err)
+			}
+		}
+
+		// Cache the full upstream graph for escalation.
+		for asn, upstreams := range disc.UpstreamGraph {
+			if err := h.store.UpsertUpstreamCache(r.Context(), asn, upstreams); err != nil {
+				log.Printf("ERROR: cache upstream for AS%d: %v", asn, err)
+			}
 		}
 	}
 
