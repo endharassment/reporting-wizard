@@ -63,7 +63,15 @@ func composeBody(cfg EmailConfig, report *model.Report, infraResults []*model.In
 	var b strings.Builder
 
 	b.WriteString("Dear Abuse Team,\n\n")
-	b.WriteString(fmt.Sprintf("We are writing to report a %s violation hosted on the domain %s.\n\n", violationLabel(report.ViolationType), report.Domain))
+	b.WriteString(fmt.Sprintf("We are writing on behalf of an affected individual to report a %s violation hosted on the domain %s, and to request that you take action under your acceptable use policy.\n\n", violationLabel(report.ViolationType), report.Domain))
+
+	// Add context-specific disclaimers.
+	switch report.ViolationType {
+	case model.ViolationNCII:
+		b.WriteString("This report is filed on behalf of the person depicted in the non-consensual intimate imagery, or their authorized representative.\n\n")
+	case model.ViolationCopyvio:
+		b.WriteString("NOTE: This is a Terms of Service abuse report, not a DMCA takedown notice. We are requesting that you review this content under your acceptable use policy.\n\n")
+	}
 
 	b.WriteString("Reported URLs:\n")
 	for _, u := range report.URLs {

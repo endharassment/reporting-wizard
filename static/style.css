@@ -467,6 +467,28 @@ tbody tr:hover {
   margin-bottom: 0.25rem;
 }
 
+.alert-danger {
+  background: #fff5f5;
+  border-color: #fed7d7;
+  color: #9b2c2c;
+}
+
+.alert-danger strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.alert-info {
+  background: #ebf8ff;
+  border-color: #bee3f8;
+  color: #2a4365;
+}
+
+.alert-info strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
 /* === Dashboard Cards === */
 .dashboard-cards {
   display: grid;

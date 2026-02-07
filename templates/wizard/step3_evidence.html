@@ -30,8 +30,12 @@
     </div>
 
     <div id="ncii-warning" class="alert alert-warning" role="alert" style="display: none;">
-      <strong>Important:</strong> NCII reports should only be filed by the affected individual or their authorized legal representative.
-      <strong>If the content involves minors, this constitutes CSAM.</strong> Do <em>not</em> upload, screenshot, or redistribute it. Report it immediately to the <a href="https://report.cybertip.org/" target="_blank" rel="noopener noreferrer">NCMEC CyberTipline</a> and <a href="https://www.ic3.gov/" target="_blank" rel="noopener noreferrer">IC3</a>.
+      <strong>Important:</strong> NCII reports <strong>must</strong> be filed by the person depicted in the content, or by their authorized legal representative. We file this report on your behalf &mdash; the hosting provider needs to know the complaint originates from the affected individual, not an unrelated third party. By selecting this category, you are confirming that you are the affected person or are authorized to act on their behalf.
+      <br><br><strong>If the content involves minors, this constitutes CSAM.</strong> Do <em>not</em> upload, screenshot, or redistribute it. Report it immediately to the <a href="https://report.cybertip.org/" target="_blank" rel="noopener noreferrer">NCMEC CyberTipline</a> and <a href="https://www.ic3.gov/" target="_blank" rel="noopener noreferrer">IC3</a>.
+    </div>
+
+    <div id="copyvio-warning" class="alert alert-warning" role="alert" style="display: none;">
+      <strong>Not a DMCA notice:</strong> We file <strong>Terms of Service abuse reports</strong> asking the hosting provider to enforce their acceptable use policies. We do <em>not</em> file DMCA takedown notices, which are a legal instrument that must be signed under penalty of perjury by the copyright holder or their authorized agent. If you need to send a DMCA takedown, you or your attorney must do so directly with the hosting provider.
     </div>
 
     <div class="form-group">
@@ -89,12 +93,14 @@
 <script>
   document.addEventListener('DOMContentLoaded', function() {
     var select = document.getElementById('violation_type');
-    var warning = document.getElementById('ncii-warning');
-    function checkNCII() {
-      warning.style.display = select.value === 'ncii' ? 'block' : 'none';
+    var nciiWarning = document.getElementById('ncii-warning');
+    var copyvioWarning = document.getElementById('copyvio-warning');
+    function checkViolationType() {
+      nciiWarning.style.display = select.value === 'ncii' ? 'block' : 'none';
+      copyvioWarning.style.display = select.value === 'copyvio' ? 'block' : 'none';
     }
-    select.addEventListener('change', checkNCII);
-    checkNCII();
+    select.addEventListener('change', checkViolationType);
+    checkViolationType();
   });
 </script>
 {{ end }}
