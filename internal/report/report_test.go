@@ -114,6 +114,12 @@ func TestGenerateXARF_ViolationTypes(t *testing.T) {
 			wantReportClass: "copyright",
 			wantReportType:  "copyright_infringement",
 		},
+		{
+			name:            "self_harm_facilitation",
+			violationType:   model.ViolationSelfHarmFacility,
+			wantReportClass: "content",
+			wantReportType:  "illegal_content",
+		},
 	}
 
 	for _, tt := range tests {
@@ -372,6 +378,16 @@ func TestComposeEmail(t *testing.T) {
 			wantSubjectContains: "Abuse Report: non-consensual intimate imagery (NCII) violation on example.com",
 			wantBodyParts: []string{
 				"non-consensual intimate imagery",
+			},
+		},
+		{
+			name:                "self-harm facilitation report",
+			violationType:       model.ViolationSelfHarmFacility,
+			wantSubjectContains: "Abuse Report: self-harm facilitation violation on example.com",
+			wantBodyParts: []string{
+				"self-harm facilitation",
+				"dangerous substances",
+				"exploitative practices",
 			},
 		},
 	}

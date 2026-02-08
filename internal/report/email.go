@@ -77,6 +77,8 @@ func composeBody(cfg EmailConfig, report *model.Report, infraResults []*model.In
 		b.WriteString("This report is filed on behalf of the person depicted in the non-consensual intimate imagery, or their authorized representative.\n\n")
 	case model.ViolationCopyvio:
 		b.WriteString("NOTE: This is a Terms of Service abuse report, not a DMCA takedown notice. We are requesting that you review this content under your acceptable use policy.\n\n")
+	case model.ViolationSelfHarmFacility:
+		b.WriteString("This site facilitates self-harm — for example by selling or brokering access to dangerous substances, providing detailed methods, or actively encouraging self-harm. The site operator has engaged in abusive or exploitative practices, including refusing good-faith removal requests or extorting affected individuals. We are requesting that you review this content under your acceptable use policy.\n\n")
 	}
 
 	b.WriteString("Reported URLs:\n")
@@ -141,6 +143,8 @@ func violationLabel(vt model.ViolationType) string {
 		return "doxxing"
 	case model.ViolationCopyvio:
 		return "copyright infringement"
+	case model.ViolationSelfHarmFacility:
+		return "self-harm facilitation"
 	default:
 		return string(vt)
 	}

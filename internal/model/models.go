@@ -6,11 +6,12 @@ import "time"
 type ViolationType string
 
 const (
-	ViolationHarassment ViolationType = "harassment"
-	ViolationHateSpeech ViolationType = "hate_speech"
-	ViolationNCII       ViolationType = "ncii"
-	ViolationDoxxing    ViolationType = "doxxing"
-	ViolationCopyvio    ViolationType = "copyvio"
+	ViolationHarassment       ViolationType = "harassment"
+	ViolationHateSpeech       ViolationType = "hate_speech"
+	ViolationNCII             ViolationType = "ncii"
+	ViolationDoxxing          ViolationType = "doxxing"
+	ViolationCopyvio          ViolationType = "copyvio"
+	ViolationSelfHarmFacility ViolationType = "self_harm_facilitation"
 )
 
 // ReportStatus tracks a report through its lifecycle.
