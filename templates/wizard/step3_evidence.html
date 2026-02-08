@@ -23,6 +23,7 @@
         <option value="ncii"{{ if eq (string .Report.ViolationType) "ncii" }} selected{{ end }}>Non-Consensual Intimate Images (NCII)</option>
         <option value="doxxing"{{ if eq (string .Report.ViolationType) "doxxing" }} selected{{ end }}>Doxxing</option>
         <option value="copyvio"{{ if eq (string .Report.ViolationType) "copyvio" }} selected{{ end }}>Copyright / Likeness Violation</option>
+        <option value="self_harm_facilitation"{{ if eq (string .Report.ViolationType) "self_harm_facilitation" }} selected{{ end }}>Self-Harm Facilitation</option>
       </select>
       {{ if .Errors.ViolationType }}
       <span class="form-error" role="alert">{{ .Errors.ViolationType }}</span>
@@ -36,6 +37,11 @@
 
     <div id="copyvio-warning" class="alert alert-warning" role="alert" style="display: none;">
       <strong>Not a DMCA notice:</strong> We file <strong>Terms of Service abuse reports</strong> asking the hosting provider to enforce their acceptable use policies. We do <em>not</em> file DMCA takedown notices, which are a legal instrument that must be signed under penalty of perjury by the copyright holder or their authorized agent. If you need to send a DMCA takedown, you or your attorney must do so directly with the hosting provider.
+    </div>
+
+    <div id="selfharm-warning" class="alert alert-warning" role="alert" style="display: none;">
+      <strong>Self-harm facilitation:</strong> This category covers sites that facilitate self-harm &mdash; for example by selling or brokering access to dangerous substances, providing detailed methods or instructions, or actively encouraging self-harm. Your report should describe how the site facilitates self-harm and what exploitative practices the operator engages in.
+      <br><br><strong>If someone is in immediate danger of self-harm,</strong> please contact the <a href="https://988lifeline.org/" target="_blank" rel="noopener noreferrer">988 Suicide &amp; Crisis Lifeline</a> (call or text 988) or your local emergency services.
     </div>
 
     <div class="form-group">
@@ -95,9 +101,11 @@
     var select = document.getElementById('violation_type');
     var nciiWarning = document.getElementById('ncii-warning');
     var copyvioWarning = document.getElementById('copyvio-warning');
+    var selfharmWarning = document.getElementById('selfharm-warning');
     function checkViolationType() {
       nciiWarning.style.display = select.value === 'ncii' ? 'block' : 'none';
       copyvioWarning.style.display = select.value === 'copyvio' ? 'block' : 'none';
+      selfharmWarning.style.display = select.value === 'self_harm_facilitation' ? 'block' : 'none';
     }
     select.addEventListener('change', checkViolationType);
     checkViolationType();

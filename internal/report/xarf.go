@@ -59,11 +59,12 @@ const maxInlineEvidenceBytes int64 = 1 << 20 // 1 MiB
 
 // violationMapping maps ViolationType to (ReportClass, ReportType).
 var violationMapping = map[model.ViolationType][2]string{
-	model.ViolationHarassment: {"content", "illegal_content"},
-	model.ViolationHateSpeech: {"content", "illegal_content"},
-	model.ViolationNCII:       {"content", "illegal_content"},
-	model.ViolationDoxxing:    {"content", "illegal_content"},
-	model.ViolationCopyvio:    {"copyright", "copyright_infringement"},
+	model.ViolationHarassment:       {"content", "illegal_content"},
+	model.ViolationHateSpeech:       {"content", "illegal_content"},
+	model.ViolationNCII:             {"content", "illegal_content"},
+	model.ViolationDoxxing:          {"content", "illegal_content"},
+	model.ViolationCopyvio:          {"copyright", "copyright_infringement"},
+	model.ViolationSelfHarmFacility: {"content", "illegal_content"},
 }
 
 // GenerateXARF creates an X-ARF v4 JSON report from a model.Report, its
