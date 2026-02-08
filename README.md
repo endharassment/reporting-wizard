@@ -20,17 +20,23 @@ Apache 2.0. See [LICENSE](LICENSE).
 cmd/wizard/main.go          Entry point, config, server startup
 internal/
   server/                   HTTP handlers, middleware, routing (chi)
+    blocklist.go            Top-site domain blocklist (embedded txt)
+    recaptcha.go            reCAPTCHA v3 server-side verification
   store/                    SQLite persistence (modernc.org/sqlite)
     migrations/             Embedded SQL migrations
   model/                    Domain types (User, Report, Evidence, etc.)
   infra/                    Infrastructure discovery (DNS, ASN, RDAP, BGP)
+    cache.go                Generic TTL cache for external lookups
   report/                   X-ARF generation, email composition, SendGrid
   escalation/               Background engine for report escalation
+  email/                    IMAP reply fetcher for provider responses
+  boilerplate/              Known-domain context DB for abuse reports
   snapshot/                 URL text snapshotting (plain HTTP / Tor)
   gdrive/                   Google Drive URL parsing and metadata verification
   admin/                    Admin handlers (dashboard, approval queue)
 templates/                  html/template files (embedded)
 static/                     CSS, htmx (embedded)
+.circleci/config.yml        CI: build + test on Go 1.25
 ```
 
 The application uses server-side rendering with `html/template` and
@@ -61,6 +67,11 @@ All configuration is via environment variables (with flag overrides for some):
 | `WIZARD_SENDGRID_KEY` | Yes | -- | SendGrid API key for outgoing emails |
 | `WIZARD_FROM_EMAIL` | No | `reports@endharassment.net` | Sender email address |
 | `WIZARD_FROM_NAME` | No | `End Network Harassment Inc` | Sender display name |
+| `WIZARD_RECAPTCHA_SITE_KEY` | No | -- | reCAPTCHA v3 site key (skipped if unset) |
+| `WIZARD_RECAPTCHA_SECRET_KEY` | No | -- | reCAPTCHA v3 secret key (skipped if unset) |
+| `WIZARD_IMAP_SERVER` | No | -- | IMAP server for fetching provider replies |
+| `WIZARD_IMAP_USERNAME` | No | -- | IMAP username |
+| `WIZARD_IMAP_PASSWORD` | No | -- | IMAP password |
 
 ### Google OAuth Setup
 
@@ -90,6 +101,17 @@ export WIZARD_BASE_URL="https://your-domain.example.com"
 
 The SQLite database and migrations are created automatically on first run.
 
+## Supported Violation Types
+
+- Harassment
+- Hate speech
+- Non-consensual intimate imagery (NCII)
+- Doxxing
+- Copyright/likeness violations (ToS-based, not DMCA)
+- Self-harm facilitation
+- Defamation
+- Threats of violence
+
 ## Development
 
 ```bash
@@ -98,12 +120,18 @@ go vet ./...         # static analysis
 go test ./...        # run tests
 ```
 
+CI runs on CircleCI (Go 1.25, `go install` + `go test`).
+
 ## Report Workflow
 
 1. **Reporter enters URLs** of abusive content (all must be on the same domain).
+   URLs targeting top-50 websites (SimilarWeb) are blocked with a message
+   directing the reporter to that site's own abuse process. reCAPTCHA v3
+   provides invisible bot detection (zero user friction).
 2. **Infrastructure discovery** runs automatically: DNS resolution, IP-to-ASN
    mapping (Team Cymru), RDAP abuse contact lookup, BGP upstream discovery,
-   Cloudflare detection.
+   Cloudflare detection. Results are cached (1-hour TTL) to avoid amplifying
+   lookups against external services.
 3. **Reporter provides evidence** by pasting links to files in their own cloud
    storage (Google Drive recommended for automatic metadata verification).
    Describes the violation and selects a category.
@@ -113,7 +141,9 @@ go test ./...        # run tests
    hosting provider's abuse contact via SendGrid.
 6. **Escalation engine** monitors sent reports. If no response is received
    within the configured period (default 14 days), reports are automatically
-   escalated to upstream providers.
+   escalated to upstream providers via recursive upstream chain walking.
+7. **Email reply fetcher** polls an IMAP mailbox for provider responses and
+   associates them with the corresponding outgoing report emails.
 
 ## Evidence Handling
 
@@ -151,12 +181,15 @@ See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for a detailed security audit.
 Key security features:
 - CSRF protection (HMAC double-submit cookie)
 - Per-IP and per-user rate limiting (token bucket)
+- reCAPTCHA v3 bot detection on report creation (optional, graceful skip in dev)
+- Top-site domain blocklist prevents misuse against major websites
 - Security headers (CSP, X-Frame-Options, etc.)
 - Parameterized SQL queries (no string concatenation)
 - `html/template` auto-escaping (XSS prevention)
 - `crypto/rand` for all token generation
 - Admin approval required before any email is sent
 - Audit logging for all admin actions
+- User banning support
 
 ## Pre-Launch Checklist
 
