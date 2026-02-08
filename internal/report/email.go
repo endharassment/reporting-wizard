@@ -79,6 +79,10 @@ func composeBody(cfg EmailConfig, report *model.Report, infraResults []*model.In
 		b.WriteString("NOTE: This is a Terms of Service abuse report, not a DMCA takedown notice. We are requesting that you review this content under your acceptable use policy.\n\n")
 	case model.ViolationSelfHarmFacility:
 		b.WriteString("This site facilitates self-harm — for example by selling or brokering access to dangerous substances, providing detailed methods, or actively encouraging self-harm. The site operator has engaged in abusive or exploitative practices, including refusing good-faith removal requests or extorting affected individuals. We are requesting that you review this content under your acceptable use policy.\n\n")
+	case model.ViolationDefamation:
+		b.WriteString("This report concerns content that has been adjudicated as defamatory by a court of competent jurisdiction. The reporter possesses a court judgment or court finding establishing that the content is defamatory. We are requesting that you review this content under your acceptable use policy and in light of the court's findings.\n\n")
+	case model.ViolationThreats:
+		b.WriteString("This report concerns content that constitutes direct threats of violence, intimidation, or sustained abusive behaviour targeting an individual. We are requesting that you review this content under your acceptable use policy.\n\n")
 	}
 
 	b.WriteString("Reported URLs:\n")
@@ -145,6 +149,10 @@ func violationLabel(vt model.ViolationType) string {
 		return "copyright infringement"
 	case model.ViolationSelfHarmFacility:
 		return "self-harm facilitation"
+	case model.ViolationDefamation:
+		return "defamation"
+	case model.ViolationThreats:
+		return "threatening or abusive behaviour"
 	default:
 		return string(vt)
 	}

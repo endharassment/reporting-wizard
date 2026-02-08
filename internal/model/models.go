@@ -12,6 +12,8 @@ const (
 	ViolationDoxxing          ViolationType = "doxxing"
 	ViolationCopyvio          ViolationType = "copyvio"
 	ViolationSelfHarmFacility ViolationType = "self_harm_facilitation"
+	ViolationDefamation       ViolationType = "defamation"
+	ViolationThreats          ViolationType = "threats"
 )
 
 // ReportStatus tracks a report through its lifecycle.

@@ -120,6 +120,18 @@ func TestGenerateXARF_ViolationTypes(t *testing.T) {
 			wantReportClass: "content",
 			wantReportType:  "illegal_content",
 		},
+		{
+			name:            "defamation",
+			violationType:   model.ViolationDefamation,
+			wantReportClass: "content",
+			wantReportType:  "illegal_content",
+		},
+		{
+			name:            "threats",
+			violationType:   model.ViolationThreats,
+			wantReportClass: "content",
+			wantReportType:  "illegal_content",
+		},
 	}
 
 	for _, tt := range tests {
@@ -388,6 +400,26 @@ func TestComposeEmail(t *testing.T) {
 				"self-harm facilitation",
 				"dangerous substances",
 				"exploitative practices",
+			},
+		},
+		{
+			name:                "defamation report",
+			violationType:       model.ViolationDefamation,
+			wantSubjectContains: "Abuse Report: defamation violation on example.com",
+			wantBodyParts: []string{
+				"defamation violation",
+				"adjudicated as defamatory",
+				"court judgment or court finding",
+			},
+		},
+		{
+			name:                "threats report",
+			violationType:       model.ViolationThreats,
+			wantSubjectContains: "Abuse Report: threatening or abusive behaviour violation on example.com",
+			wantBodyParts: []string{
+				"threatening or abusive behaviour",
+				"threats of violence",
+				"acceptable use policy",
 			},
 		},
 	}
