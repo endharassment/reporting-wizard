@@ -183,7 +183,9 @@ func (e *Engine) escalateEmail(ctx context.Context, email *model.OutgoingEmail, 
 	}
 
 	// Look up the target ASN's upstreams from the recursive cache.
-	upstreamASNs, err := e.store.GetUpstreamsForASN(ctx, email.TargetASN)
+	// Use 0 maxAge: the escalation engine should use whatever is cached,
+	// even if stale, because re-fetching is done during discovery.
+	upstreamASNs, err := e.store.GetUpstreamsForASN(ctx, email.TargetASN, 0)
 	if err != nil {
 		return 0, fmt.Errorf("looking up upstreams for AS%d: %w", email.TargetASN, err)
 	}

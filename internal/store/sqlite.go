@@ -739,9 +739,22 @@ func (s *SQLiteStore) UpsertUpstreamCache(ctx context.Context, asn int, upstream
 	return tx.Commit()
 }
 
-func (s *SQLiteStore) GetUpstreamsForASN(ctx context.Context, asn int) ([]int, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT upstream_asn FROM upstream_cache WHERE asn = ? ORDER BY upstream_asn`, asn)
+func (s *SQLiteStore) GetUpstreamsForASN(ctx context.Context, asn int, maxAge time.Duration) ([]int, error) {
+	var query string
+	var args []interface{}
+	if maxAge > 0 {
+		query = `SELECT upstream_asn FROM upstream_cache
+			WHERE asn = ? AND fetched_at > datetime('now', ?)
+			ORDER BY upstream_asn`
+		// SQLite datetime modifier: e.g. "-3600 seconds"
+		args = []interface{}{asn, fmt.Sprintf("-%d seconds", int(maxAge.Seconds()))}
+	} else {
+		query = `SELECT upstream_asn FROM upstream_cache
+			WHERE asn = ? ORDER BY upstream_asn`
+		args = []interface{}{asn}
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
