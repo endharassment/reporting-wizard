@@ -24,6 +24,8 @@
         <option value="doxxing"{{ if eq (string .Report.ViolationType) "doxxing" }} selected{{ end }}>Doxxing</option>
         <option value="copyvio"{{ if eq (string .Report.ViolationType) "copyvio" }} selected{{ end }}>Copyright / Likeness Violation</option>
         <option value="self_harm_facilitation"{{ if eq (string .Report.ViolationType) "self_harm_facilitation" }} selected{{ end }}>Self-Harm Facilitation</option>
+        <option value="defamation"{{ if eq (string .Report.ViolationType) "defamation" }} selected{{ end }}>Defamation</option>
+        <option value="threats"{{ if eq (string .Report.ViolationType) "threats" }} selected{{ end }}>Threats of Violence</option>
       </select>
       {{ if .Errors.ViolationType }}
       <span class="form-error" role="alert">{{ .Errors.ViolationType }}</span>
@@ -42,6 +44,17 @@
     <div id="selfharm-warning" class="alert alert-warning" role="alert" style="display: none;">
       <strong>Self-harm facilitation:</strong> This category covers sites that facilitate self-harm &mdash; for example by selling or brokering access to dangerous substances, providing detailed methods or instructions, or actively encouraging self-harm. Your report should describe how the site facilitates self-harm and what exploitative practices the operator engages in.
       <br><br><strong>If someone is in immediate danger of self-harm,</strong> please contact the <a href="https://988lifeline.org/" target="_blank" rel="noopener noreferrer">988 Suicide &amp; Crisis Lifeline</a> (call or text 988) or your local emergency services.
+    </div>
+
+    <div id="defamation-warning" class="alert alert-warning" role="alert" style="display: none;">
+      <strong>Adjudicated defamation:</strong> This category is for content that a court of competent jurisdiction has found to be defamatory &mdash; for example, through a damages judgment or declaratory ruling. Your report should reference the case name, court, date, and relevant findings. Please link to a copy of the court order or judgment in your evidence.
+      <br><br><strong>This is not for general disagreements or negative reviews.</strong> If the content has not been adjudicated as defamatory by a court, consider whether your situation is better described by one of the other categories.
+    </div>
+
+    <div id="threats-warning" class="alert alert-warning" role="alert" style="display: none;">
+      <strong>Threats of violence:</strong> This category is for content that constitutes specific, credible threats of violence against an identifiable person &mdash; sometimes called &ldquo;true threats&rdquo; under First Amendment case law. This is distinct from general harassment; use this category when the content communicates a serious intent to commit violence and a reasonable person would perceive it as a genuine threat.
+      <br><br>Your report should describe the specific threatening language, the target, and why the threat is credible (e.g., the speaker has the means or proximity to carry it out, has made prior threats, or has escalated behaviour).
+      <br><br><strong>If someone is in immediate danger,</strong> contact law enforcement first. This reporting tool notifies hosting providers &mdash; it is not a substitute for emergency services.
     </div>
 
     <div class="form-group">
@@ -102,10 +115,14 @@
     var nciiWarning = document.getElementById('ncii-warning');
     var copyvioWarning = document.getElementById('copyvio-warning');
     var selfharmWarning = document.getElementById('selfharm-warning');
+    var defamationWarning = document.getElementById('defamation-warning');
+    var threatsWarning = document.getElementById('threats-warning');
     function checkViolationType() {
       nciiWarning.style.display = select.value === 'ncii' ? 'block' : 'none';
       copyvioWarning.style.display = select.value === 'copyvio' ? 'block' : 'none';
       selfharmWarning.style.display = select.value === 'self_harm_facilitation' ? 'block' : 'none';
+      defamationWarning.style.display = select.value === 'defamation' ? 'block' : 'none';
+      threatsWarning.style.display = select.value === 'threats' ? 'block' : 'none';
     }
     select.addEventListener('change', checkViolationType);
     checkViolationType();

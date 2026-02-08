@@ -65,6 +65,8 @@ var violationMapping = map[model.ViolationType][2]string{
 	model.ViolationDoxxing:          {"content", "illegal_content"},
 	model.ViolationCopyvio:          {"copyright", "copyright_infringement"},
 	model.ViolationSelfHarmFacility: {"content", "illegal_content"},
+	model.ViolationDefamation:       {"content", "illegal_content"},
+	model.ViolationThreats:          {"content", "illegal_content"},
 }
 
 // GenerateXARF creates an X-ARF v4 JSON report from a model.Report, its
