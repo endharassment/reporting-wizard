@@ -19,8 +19,13 @@
     <strong>Retaliation risk:</strong> Hosting providers <strong>will forward</strong> your abuse report to the site operator. Operators of abusive sites may retaliate by publicly posting your complaint and encouraging further harassment. There is <strong>no expectation of privacy</strong> for abuse reports. Do not include personally identifying information in your description or evidence unless you accept this risk.
   </div>
 
-  <form method="post" action="/wizard/step1">
+  {{ if .Errors.Recaptcha }}
+  <div class="alert alert-danger" role="alert">{{ .Errors.Recaptcha }}</div>
+  {{ end }}
+
+  <form method="post" action="/wizard/step1" id="step1-form">
     <input type="hidden" name="csrf_token" value="{{ .CSRFToken }}">
+    <input type="hidden" name="g-recaptcha-response" id="g-recaptcha-response">
 
     <div class="form-group">
       <label for="urls">URLs (one per line)</label>
@@ -37,5 +42,23 @@
       <button type="submit" class="btn btn-primary">Look Up Infrastructure</button>
     </div>
   </form>
+
+  {{ if .RecaptchaSiteKey }}
+  <script src="https://www.google.com/recaptcha/api.js?render={{ .RecaptchaSiteKey }}"></script>
+  <script>
+    document.getElementById('step1-form').addEventListener('submit', function(e) {
+      var tokenField = document.getElementById('g-recaptcha-response');
+      if (tokenField.value) return;
+      e.preventDefault();
+      var form = this;
+      grecaptcha.ready(function() {
+        grecaptcha.execute('{{ .RecaptchaSiteKey }}', {action: 'create_report'}).then(function(token) {
+          tokenField.value = token;
+          form.submit();
+        });
+      });
+    });
+  </script>
+  {{ end }}
 </section>
 {{ end }}

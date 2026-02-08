@@ -58,21 +58,23 @@ func main() {
 	}
 
 	cfg := server.Config{
-		ListenAddr:     *listenAddr,
-		DBPath:         *dbPath,
-		SendGridKey:    os.Getenv("WIZARD_SENDGRID_KEY"),
-		FromEmail:      envOr("WIZARD_FROM_EMAIL", "reports@endharassment.net"),
-		FromName:       envOr("WIZARD_FROM_NAME", "End Network Harassment Inc"),
-		BaseURL:        baseURL,
-		GoogleClientID: os.Getenv("WIZARD_GOOGLE_CLIENT_ID"),
-		GoogleSecret:   os.Getenv("WIZARD_GOOGLE_SECRET"),
-		GitHubClientID: os.Getenv("WIZARD_GITHUB_CLIENT_ID"),
-		GitHubSecret:   os.Getenv("WIZARD_GITHUB_SECRET"),
-		EscalationDays: 14,
-		SessionSecret:  sessionSecret,
-		IMAPServer:     os.Getenv("WIZARD_IMAP_SERVER"),
-		IMAPUsername:   os.Getenv("WIZARD_IMAP_USERNAME"),
-		IMAPPassword:   os.Getenv("WIZARD_IMAP_PASSWORD"),
+		ListenAddr:         *listenAddr,
+		DBPath:             *dbPath,
+		SendGridKey:        os.Getenv("WIZARD_SENDGRID_KEY"),
+		FromEmail:          envOr("WIZARD_FROM_EMAIL", "reports@endharassment.net"),
+		FromName:           envOr("WIZARD_FROM_NAME", "End Network Harassment Inc"),
+		BaseURL:            baseURL,
+		GoogleClientID:     os.Getenv("WIZARD_GOOGLE_CLIENT_ID"),
+		GoogleSecret:       os.Getenv("WIZARD_GOOGLE_SECRET"),
+		GitHubClientID:     os.Getenv("WIZARD_GITHUB_CLIENT_ID"),
+		GitHubSecret:       os.Getenv("WIZARD_GITHUB_SECRET"),
+		RecaptchaSiteKey:   os.Getenv("WIZARD_RECAPTCHA_SITE_KEY"),
+		RecaptchaSecretKey: os.Getenv("WIZARD_RECAPTCHA_SECRET_KEY"),
+		EscalationDays:     14,
+		SessionSecret:      sessionSecret,
+		IMAPServer:         os.Getenv("WIZARD_IMAP_SERVER"),
+		IMAPUsername:       os.Getenv("WIZARD_IMAP_USERNAME"),
+		IMAPPassword:       os.Getenv("WIZARD_IMAP_PASSWORD"),
 	}
 
 	srv, err := server.NewServer(cfg, db, tmplFS, stFS)
