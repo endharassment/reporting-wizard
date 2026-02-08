@@ -76,9 +76,9 @@
 - `MaxConcurrency = 8` limits parallel lookups per discovery run (good).
 
 **Additional mitigations needed**:
-- **Infra discovery result caching**: Cache DNS, ASN, RDAP, and BGP results by domain/IP with a TTL (e.g., 1 hour). Most reports target the same small set of domains.
+- ~~**Infra discovery result caching**~~: **Done** — in-memory TTL cache (1 hour) for DNS, ASN, RDAP, and BGP results in `discovery.go` (`cache.go`).
 - **Per-user discovery rate limit**: Max 5 infra discoveries per user per hour.
-- **Context timeouts**: All external lookups should have explicit timeouts (10s for DNS, 15s for RDAP, 10s for BGP whois). The BGP client currently has no deadline on the TCP connection beyond the parent context.
+- ~~**Context timeouts**~~: **Done** — per-operation timeouts (10s DNS, 10s ASN, 15s RDAP, 10s BGP) in `discovery.go`; BGP connection deadline set in `bgp.go`. Upstream cache TTL filtering added to `sqlite.go`.
 
 ### 2.4 SQLite Write Contention
 **Severity**: LOW
@@ -323,7 +323,7 @@
 | 7 | No filename sanitization | MEDIUM | Implemented in `safety.go` |
 | 8 | Magic link not atomically single-use | MEDIUM | Needs fix in store layer |
 | 9 | No per-report evidence size cap | HIGH | Implemented in `safety.go` |
-| 10 | BGP client has no connection timeout | MEDIUM | Needs fix |
+| 10 | BGP client has no connection timeout | MEDIUM | **Resolved** (connection deadline in `bgp.go`; per-op timeouts + in-memory TTL cache in `discovery.go`) |
 | 11 | No GDPR compliance | HIGH | Needs policy and implementation |
 | 12 | No evidence retention policy | MEDIUM | Needs policy |
 | 13 | Email reputation not protected | HIGH | Needs SendGrid configuration |
@@ -377,7 +377,7 @@
 | 7 | No filename sanitization | MEDIUM | **Resolved** (`safety.go`) |
 | 8 | Magic link not atomically single-use | MEDIUM | **Resolved** (magic links removed entirely) |
 | 9 | No per-report evidence size cap | HIGH | **Resolved** (no file uploads; evidence is URL-based) |
-| 10 | BGP client has no connection timeout | MEDIUM | Needs fix |
+| 10 | BGP client has no connection timeout | MEDIUM | **Resolved** (connection deadline in `bgp.go`; per-op timeouts + in-memory TTL cache in `discovery.go`) |
 | 11 | No GDPR compliance | HIGH | Needs policy and implementation |
 | 12 | No evidence retention policy | MEDIUM | Needs policy (simplified: no files stored, only URLs and metadata) |
 | 13 | Email reputation not protected | HIGH | Needs SendGrid configuration (SPF/DKIM/DMARC) |

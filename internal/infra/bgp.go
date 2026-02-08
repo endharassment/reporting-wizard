@@ -7,7 +7,12 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// bgpDefaultTimeout is the fallback deadline for BGP whois reads when
+// the parent context has no deadline.
+const bgpDefaultTimeout = 10 * time.Second
 
 // BGPClient abstracts BGP upstream lookups for testing.
 type BGPClient interface {
@@ -31,6 +36,15 @@ func (c *bgpToolsClient) LookupUpstreams(ctx context.Context, asn int) ([]int, e
 		return nil, fmt.Errorf("bgp.tools dial: %w", err)
 	}
 	defer conn.Close()
+
+	// Propagate the context deadline to the connection so reads/writes
+	// are bounded. Without this, a connected-but-unresponsive server
+	// could block the scanner indefinitely.
+	if deadline, ok := ctx.Deadline(); ok {
+		conn.SetDeadline(deadline)
+	} else {
+		conn.SetDeadline(time.Now().Add(bgpDefaultTimeout))
+	}
 
 	query := fmt.Sprintf("AS%d\n", asn)
 	if _, err := conn.Write([]byte(query)); err != nil {

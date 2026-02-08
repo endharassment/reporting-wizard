@@ -228,7 +228,7 @@ func (m *mockStore) UpsertUpstreamCache(_ context.Context, asn int, upstreams []
 	return nil
 }
 
-func (m *mockStore) GetUpstreamsForASN(_ context.Context, asn int) ([]int, error) {
+func (m *mockStore) GetUpstreamsForASN(_ context.Context, asn int, _ time.Duration) ([]int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.upstreamCache[asn], nil

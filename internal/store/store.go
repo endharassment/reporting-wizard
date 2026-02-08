@@ -66,5 +66,7 @@ type Store interface {
 
 	// Upstream Cache (recursive BGP upstream chain)
 	UpsertUpstreamCache(ctx context.Context, asn int, upstreams []int) error
-	GetUpstreamsForASN(ctx context.Context, asn int) ([]int, error)
+	// GetUpstreamsForASN returns cached upstream ASNs. Entries older than
+	// maxAge are ignored. Pass 0 to return all entries regardless of age.
+	GetUpstreamsForASN(ctx context.Context, asn int, maxAge time.Duration) ([]int, error)
 }
