@@ -30,6 +30,20 @@ func (s *Server) HandleWizardStep1Submit(w http.ResponseWriter, r *http.Request)
 	user := UserFromContext(r.Context())
 	rawURLs := r.FormValue("urls")
 
+	errors := map[string]string{}
+
+	// reCAPTCHA v3 verification (skipped if no secret key configured).
+	if s.config.RecaptchaSecretKey != "" {
+		token := r.FormValue("g-recaptcha-response")
+		score, err := verifyRecaptcha(r.Context(), s.config.RecaptchaSecretKey, token, r.RemoteAddr)
+		if err != nil {
+			log.Printf("WARN: recaptcha verification error: %v", err)
+			errors["Recaptcha"] = "Bot verification failed. Please try again."
+		} else if score < 0.5 {
+			errors["Recaptcha"] = "Bot verification failed. Please try again."
+		}
+	}
+
 	lines := strings.Split(rawURLs, "\n")
 	var urls []string
 	for _, line := range lines {
@@ -39,7 +53,6 @@ func (s *Server) HandleWizardStep1Submit(w http.ResponseWriter, r *http.Request)
 		}
 	}
 
-	errors := map[string]string{}
 	if len(urls) == 0 {
 		errors["URLs"] = "Please enter at least one URL."
 	}
@@ -58,6 +71,13 @@ func (s *Server) HandleWizardStep1Submit(w http.ResponseWriter, r *http.Request)
 		} else if host != domain {
 			errors["URLs"] = fmt.Sprintf("All URLs must be from the same domain. Found %s and %s.", domain, host)
 			break
+		}
+	}
+
+	// Check domain blocklist.
+	if domain != "" && len(errors) == 0 {
+		if base := blockedBaseDomain(domain); base != "" {
+			errors["URLs"] = fmt.Sprintf("%s is a major website with its own abuse reporting process. Please report abuse directly to that site.", base)
 		}
 	}
 

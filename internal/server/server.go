@@ -19,21 +19,23 @@ import (
 
 // Config holds server configuration.
 type Config struct {
-	ListenAddr     string
-	DBPath         string
-	SendGridKey    string
-	FromEmail      string
-	FromName       string
-	BaseURL        string
-	GoogleClientID string
-	GoogleSecret   string
-	GitHubClientID string
-	GitHubSecret   string
-	EscalationDays int
-	SessionSecret  string
-	IMAPServer     string
-	IMAPUsername   string
-	IMAPPassword   string
+	ListenAddr         string
+	DBPath             string
+	SendGridKey        string
+	FromEmail          string
+	FromName           string
+	BaseURL            string
+	GoogleClientID     string
+	GoogleSecret       string
+	GitHubClientID     string
+	GitHubSecret       string
+	RecaptchaSiteKey   string
+	RecaptchaSecretKey string
+	EscalationDays     int
+	SessionSecret      string
+	IMAPServer         string
+	IMAPUsername       string
+	IMAPPassword       string
 }
 
 // Snapshotter defines the interface for crawling and snapshotting URLs.
@@ -231,6 +233,7 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 	}
 	data["User"] = UserFromContext(r.Context())
 	data["CSRFToken"] = CSRFTokenFromContext(r.Context())
+	data["RecaptchaSiteKey"] = s.config.RecaptchaSiteKey
 
 	if err := s.templates.ExecuteTemplate(w, name, data); err != nil {
 		log.Printf("ERROR: render template %s: %v", name, err)
