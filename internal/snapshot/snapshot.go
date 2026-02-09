@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os/exec"
 	"strings"
 	"time"
 	"unicode"
@@ -93,6 +94,51 @@ func (s *PlainHTTPSnapshotter) Snapshot(ctx context.Context, targetURL string) (
 	}
 
 	text := StripHTML(string(body))
+	if len(text) > 50000 {
+		text = text[:50000] + "\n[truncated]"
+	}
+
+	return text, nil
+}
+
+// TorBinarySnapshotter shells out to the tor-fetcher binary for URL snapshots.
+// This handles .onion sites and PoW challenges (Tartarus, BasedFlare).
+type TorBinarySnapshotter struct {
+	binaryPath string
+	socksAddr  string
+	timeout    time.Duration
+}
+
+// NewTorBinarySnapshotter creates a snapshotter that execs the tor-fetcher
+// binary at binaryPath, using socksAddr as the Tor SOCKS5 proxy.
+func NewTorBinarySnapshotter(binaryPath, socksAddr string) *TorBinarySnapshotter {
+	return &TorBinarySnapshotter{
+		binaryPath: binaryPath,
+		socksAddr:  socksAddr,
+		timeout:    2 * time.Minute,
+	}
+}
+
+// Snapshot execs tor-fetcher for the given URL and returns stripped text.
+func (s *TorBinarySnapshotter) Snapshot(ctx context.Context, targetURL string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, s.timeout)
+	defer cancel()
+
+	args := []string{"-target", targetURL}
+	if s.socksAddr != "" {
+		args = append(args, "-proxy", s.socksAddr)
+	}
+
+	cmd := exec.CommandContext(ctx, s.binaryPath, args...)
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && len(exitErr.Stderr) > 0 {
+			return "", fmt.Errorf("tor-fetcher %s: %w: %s", targetURL, err, exitErr.Stderr)
+		}
+		return "", fmt.Errorf("tor-fetcher %s: %w", targetURL, err)
+	}
+
+	text := StripHTML(string(output))
 	if len(text) > 50000 {
 		text = text[:50000] + "\n[truncated]"
 	}
