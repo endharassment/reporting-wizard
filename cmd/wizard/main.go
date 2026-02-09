@@ -83,9 +83,16 @@ func main() {
 	}
 	defer srv.Stop()
 
-	// Set up URL snapshotter (plain HTTP; tor-fetcher can be wired in when
-	// a local Tor SOCKS proxy is available).
-	srv.SetSnapshotter(snapshot.NewPlainHTTPSnapshotter())
+	// Set up URL snapshotter. Use tor-fetcher binary if configured,
+	// otherwise fall back to plain HTTP.
+	if torBin := os.Getenv("WIZARD_TOR_FETCHER_BIN"); torBin != "" {
+		torProxy := envOr("WIZARD_TOR_PROXY", "socks5://127.0.0.1:9050")
+		srv.SetSnapshotter(snapshot.NewTorBinarySnapshotter(torBin, torProxy))
+		log.Printf("URL snapshotter: tor-fetcher (%s via %s)", torBin, torProxy)
+	} else {
+		srv.SetSnapshotter(snapshot.NewPlainHTTPSnapshotter())
+		log.Println("URL snapshotter: plain HTTP (set WIZARD_TOR_FETCHER_BIN to enable Tor)")
+	}
 
 	// Initialize domain boilerplate database.
 	boilerplateDB := boilerplate.NewDB()
