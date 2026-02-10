@@ -1,0 +1,12 @@
+{{ template "layout" . }}
+{{ define "content" }}
+<section class="auth-page">
+  <h1>Invalid Invite</h1>
+  <p>This invite link is no longer valid. It may have expired, been revoked, or already been used.</p>
+  {{ if .Error }}
+  <p class="text-muted">{{ .Error }}</p>
+  {{ end }}
+  <p>Please request a new invite link from an administrator.</p>
+  <p><a href="/auth/login" class="btn btn-primary">Back to Login</a></p>
+</section>
+{{ end }}

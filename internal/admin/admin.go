@@ -2,6 +2,7 @@ package admin
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"html/template"
 	"log"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,10 +42,11 @@ type AdminHandler struct {
 	getUser   UserFunc
 	getCSRF   CSRFFunc
 	escalator Escalator
+	baseURL   string
 }
 
 // NewAdminHandler creates an AdminHandler.
-func NewAdminHandler(s store.Store, d *infra.Discovery, emailCfg report.EmailConfig, tmpl *template.Template, getUser UserFunc, getCSRF CSRFFunc) *AdminHandler {
+func NewAdminHandler(s store.Store, d *infra.Discovery, emailCfg report.EmailConfig, tmpl *template.Template, getUser UserFunc, getCSRF CSRFFunc, baseURL string) *AdminHandler {
 	return &AdminHandler{
 		store:     s,
 		discovery: d,
@@ -51,6 +54,7 @@ func NewAdminHandler(s store.Store, d *infra.Discovery, emailCfg report.EmailCon
 		templates: tmpl,
 		getUser:   getUser,
 		getCSRF:   getCSRF,
+		baseURL:   baseURL,
 	}
 }
 
@@ -561,6 +565,93 @@ func (h *AdminHandler) HandleReplyAction(w http.ResponseWriter, r *http.Request)
 	}
 
 	http.Redirect(w, r, fmt.Sprintf("/admin/reports/%s", email.ReportID), http.StatusFound)
+}
+
+// --- Invites ---
+
+// HandleListInvites renders the invite management page.
+func (h *AdminHandler) HandleListInvites(w http.ResponseWriter, r *http.Request) {
+	invites, err := h.store.ListInvites(r.Context())
+	if err != nil {
+		log.Printf("ERROR: list invites: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	users, _ := h.store.ListUsers(r.Context())
+	userNames := make(map[string]string)
+	for _, u := range users {
+		userNames[u.ID] = u.Name
+	}
+
+	h.render(w, r, "invites.html", map[string]interface{}{
+		"Invites":   invites,
+		"UserNames": userNames,
+		"BaseURL":   h.baseURL,
+	})
+}
+
+// HandleCreateInvite creates a new invite code.
+func (h *AdminHandler) HandleCreateInvite(w http.ResponseWriter, r *http.Request) {
+	user := h.getUser(r.Context())
+
+	email := strings.TrimSpace(r.FormValue("email"))
+	maxUses := 1
+	if v := r.FormValue("max_uses"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			maxUses = n
+		}
+	}
+
+	var expiresAt time.Time
+	if v := r.FormValue("expires_at"); v != "" {
+		if t, err := time.Parse("2006-01-02", v); err == nil {
+			expiresAt = t.Add(23*time.Hour + 59*time.Minute + 59*time.Second).UTC()
+		}
+	}
+
+	invite := &model.Invite{
+		ID:        uuid.New().String(),
+		Code:      generateInviteCode(),
+		Email:     email,
+		CreatedBy: user.ID,
+		MaxUses:   maxUses,
+		ExpiresAt: expiresAt,
+		CreatedAt: time.Now().UTC(),
+	}
+
+	if err := h.store.CreateInvite(r.Context(), invite); err != nil {
+		log.Printf("ERROR: create invite: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	h.createAuditEntry(r, user.ID, "invite_created", invite.ID,
+		fmt.Sprintf("Invite code %s created (email=%s, max_uses=%d)", invite.Code, email, maxUses))
+
+	http.Redirect(w, r, "/admin/invites", http.StatusFound)
+}
+
+// HandleRevokeInvite revokes an existing invite.
+func (h *AdminHandler) HandleRevokeInvite(w http.ResponseWriter, r *http.Request) {
+	inviteID := chi.URLParam(r, "inviteID")
+	user := h.getUser(r.Context())
+
+	if err := h.store.RevokeInvite(r.Context(), inviteID); err != nil {
+		log.Printf("ERROR: revoke invite: %v", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	h.createAuditEntry(r, user.ID, "invite_revoked", inviteID, "Invite revoked")
+
+	http.Redirect(w, r, "/admin/invites", http.StatusFound)
+}
+
+func generateInviteCode() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return fmt.Sprintf("%x", b)
 }
 
 // --- Helpers ---

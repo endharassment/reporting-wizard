@@ -2,6 +2,18 @@
 {{ define "content" }}
 <section class="auth-page">
   <h1>Sign In</h1>
+
+  {{ if .InviteValid }}
+  <div class="flash flash-success" role="alert">
+    You've been invited! Sign in with one of the providers below to continue.
+  </div>
+  {{ else if .InviteOnly }}
+  <div class="flash flash-warning" role="alert">
+    This service is currently in closed beta. You need an invite link to register.
+    If you already have an account, you can still sign in below.
+  </div>
+  {{ end }}
+
   <p>Sign in with your Google account to file or manage abuse reports.</p>
 
   <div class="oauth-buttons">

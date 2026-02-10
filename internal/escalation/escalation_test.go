@@ -234,6 +234,14 @@ func (m *mockStore) GetUpstreamsForASN(_ context.Context, asn int, _ time.Durati
 	return m.upstreamCache[asn], nil
 }
 
+func (m *mockStore) CreateInvite(_ context.Context, _ *model.Invite) error { return nil }
+func (m *mockStore) GetInviteByCode(_ context.Context, _ string) (*model.Invite, error) {
+	return nil, fmt.Errorf("not found")
+}
+func (m *mockStore) RedeemInvite(_ context.Context, _ string, _ string) error { return nil }
+func (m *mockStore) ListInvites(_ context.Context) ([]*model.Invite, error)   { return nil, nil }
+func (m *mockStore) RevokeInvite(_ context.Context, _ string) error           { return nil }
+
 // mockAbuseContactLookup maps ASN -> abuse contact email.
 type mockAbuseContactLookup struct {
 	contacts map[int]string

@@ -771,6 +771,96 @@ func (s *SQLiteStore) GetUpstreamsForASN(ctx context.Context, asn int, maxAge ti
 	return upstreams, rows.Err()
 }
 
+// --- Invites ---
+
+// ErrInviteInvalid is returned when an invite cannot be redeemed
+// (expired, revoked, exhausted, or not found).
+var ErrInviteInvalid = fmt.Errorf("invite is invalid, expired, revoked, or fully used")
+
+func (s *SQLiteStore) scanInvite(row interface{ Scan(...interface{}) error }) (*model.Invite, error) {
+	var inv model.Invite
+	var revoked int
+	var email, usedBy, expiresAt, createdAt sql.NullString
+	err := row.Scan(&inv.ID, &inv.Code, &email, &inv.CreatedBy, &usedBy,
+		&inv.MaxUses, &inv.UseCount, &revoked, &expiresAt, &createdAt)
+	if err != nil {
+		return nil, err
+	}
+	inv.Email = email.String
+	inv.UsedBy = usedBy.String
+	inv.Revoked = revoked != 0
+	if expiresAt.Valid {
+		inv.ExpiresAt, _ = time.Parse(timeFormat, expiresAt.String)
+	}
+	if createdAt.Valid {
+		inv.CreatedAt, _ = time.Parse(timeFormat, createdAt.String)
+	}
+	return &inv, nil
+}
+
+func (s *SQLiteStore) CreateInvite(ctx context.Context, invite *model.Invite) error {
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO invites (id, code, email, created_by, used_by, max_uses, use_count, revoked, expires_at, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		invite.ID, invite.Code, nullString(invite.Email), invite.CreatedBy,
+		nullString(invite.UsedBy), invite.MaxUses, invite.UseCount,
+		boolToInt(invite.Revoked), nullTimeVal(invite.ExpiresAt),
+		invite.CreatedAt.UTC().Format(timeFormat))
+	return err
+}
+
+func (s *SQLiteStore) GetInviteByCode(ctx context.Context, code string) (*model.Invite, error) {
+	row := s.db.QueryRowContext(ctx,
+		`SELECT id, code, email, created_by, used_by, max_uses, use_count, revoked, expires_at, created_at
+		 FROM invites WHERE code = ?`, code)
+	return s.scanInvite(row)
+}
+
+func (s *SQLiteStore) RedeemInvite(ctx context.Context, code string, userID string) error {
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE invites SET use_count = use_count + 1, used_by = ?
+		 WHERE code = ? AND use_count < max_uses AND revoked = 0
+		 AND (expires_at IS NULL OR expires_at = '' OR expires_at > datetime('now'))`,
+		userID, code)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrInviteInvalid
+	}
+	return nil
+}
+
+func (s *SQLiteStore) ListInvites(ctx context.Context) ([]*model.Invite, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, code, email, created_by, used_by, max_uses, use_count, revoked, expires_at, created_at
+		 FROM invites ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var invites []*model.Invite
+	for rows.Next() {
+		inv, err := s.scanInvite(rows)
+		if err != nil {
+			return nil, err
+		}
+		invites = append(invites, inv)
+	}
+	return invites, rows.Err()
+}
+
+func (s *SQLiteStore) RevokeInvite(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx,
+		`UPDATE invites SET revoked = 1 WHERE id = ?`, id)
+	return err
+}
+
 // --- Helpers ---
 
 func boolToInt(b bool) int {

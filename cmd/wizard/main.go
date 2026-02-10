@@ -75,6 +75,7 @@ func main() {
 		IMAPServer:         os.Getenv("WIZARD_IMAP_SERVER"),
 		IMAPUsername:       os.Getenv("WIZARD_IMAP_USERNAME"),
 		IMAPPassword:       os.Getenv("WIZARD_IMAP_PASSWORD"),
+		InviteOnly:         os.Getenv("WIZARD_INVITE_ONLY") == "true",
 	}
 
 	srv, err := server.NewServer(cfg, db, tmplFS, stFS)

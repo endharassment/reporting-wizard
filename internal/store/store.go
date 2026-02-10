@@ -69,4 +69,11 @@ type Store interface {
 	// GetUpstreamsForASN returns cached upstream ASNs. Entries older than
 	// maxAge are ignored. Pass 0 to return all entries regardless of age.
 	GetUpstreamsForASN(ctx context.Context, asn int, maxAge time.Duration) ([]int, error)
+
+	// Invites
+	CreateInvite(ctx context.Context, invite *model.Invite) error
+	GetInviteByCode(ctx context.Context, code string) (*model.Invite, error)
+	RedeemInvite(ctx context.Context, code string, userID string) error
+	ListInvites(ctx context.Context) ([]*model.Invite, error)
+	RevokeInvite(ctx context.Context, id string) error
 }
