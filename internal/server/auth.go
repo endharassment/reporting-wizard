@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,14 +12,20 @@ import (
 	"time"
 
 	"github.com/endharassment/reporting-wizard/internal/model"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"
 )
 
 const (
 	sessionCookieName = "session_id"
+	inviteCookieName  = "invite_code"
 	sessionDuration   = 7 * 24 * time.Hour
 )
+
+// ErrInviteRequired is returned when invite-only mode is enabled and
+// a new user attempts to register without a valid invite code.
+var ErrInviteRequired = fmt.Errorf("invite required for registration")
 
 // SessionMiddleware reads the session cookie, validates the session, and
 // injects the user into the request context.
@@ -102,7 +109,42 @@ func RequireAdmin(next http.Handler) http.Handler {
 
 // HandleLogin renders the login page.
 func (s *Server) HandleLogin(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "login.html", nil)
+	data := map[string]interface{}{
+		"InviteOnly": s.config.InviteOnly,
+	}
+	if ic, err := r.Cookie(inviteCookieName); err == nil && ic.Value != "" {
+		data["InviteValid"] = true
+	}
+	s.render(w, r, "login.html", data)
+}
+
+// HandleInviteLink validates an invite code, stores it in a cookie,
+// and redirects to the login page.
+func (s *Server) HandleInviteLink(w http.ResponseWriter, r *http.Request) {
+	code := chi.URLParam(r, "code")
+	if code == "" {
+		http.Error(w, "Missing invite code", http.StatusBadRequest)
+		return
+	}
+
+	invite, err := s.store.GetInviteByCode(r.Context(), code)
+	if err != nil || invite.Revoked || invite.UseCount >= invite.MaxUses ||
+		(!invite.ExpiresAt.IsZero() && time.Now().UTC().After(invite.ExpiresAt)) {
+		s.render(w, r, "invite_invalid.html", nil)
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     inviteCookieName,
+		Value:    code,
+		Path:     "/",
+		MaxAge:   3600,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   strings.HasPrefix(s.config.BaseURL, "https"),
+	})
+
+	http.Redirect(w, r, "/auth/login", http.StatusFound)
 }
 
 // HandleLogout handles POST /auth/logout.
@@ -197,12 +239,26 @@ func (s *Server) HandleGoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.getOrCreateUser(r.Context(), info.Email, info.Name)
+	var inviteCode string
+	if ic, err := r.Cookie(inviteCookieName); err == nil {
+		inviteCode = ic.Value
+	}
+
+	user, err := s.getOrCreateUser(r.Context(), info.Email, info.Name, inviteCode)
 	if err != nil {
+		s.clearInviteCookie(w, r)
+		if errors.Is(err, ErrInviteRequired) {
+			s.render(w, r, "invite_required.html", nil)
+			return
+		}
 		log.Printf("ERROR: get or create user: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		s.render(w, r, "invite_invalid.html", map[string]interface{}{
+			"Error": err.Error(),
+		})
 		return
 	}
+
+	s.clearInviteCookie(w, r)
 
 	// Persist Google OAuth tokens for Drive API access.
 	user.GoogleAccessToken = token.AccessToken
@@ -310,12 +366,26 @@ func (s *Server) HandleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		name = ghUser.Login
 	}
 
-	user, err := s.getOrCreateUser(r.Context(), email, name)
+	var inviteCode string
+	if ic, err := r.Cookie(inviteCookieName); err == nil {
+		inviteCode = ic.Value
+	}
+
+	user, err := s.getOrCreateUser(r.Context(), email, name, inviteCode)
 	if err != nil {
+		s.clearInviteCookie(w, r)
+		if errors.Is(err, ErrInviteRequired) {
+			s.render(w, r, "invite_required.html", nil)
+			return
+		}
 		log.Printf("ERROR: get or create user: %v", err)
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		s.render(w, r, "invite_invalid.html", map[string]interface{}{
+			"Error": err.Error(),
+		})
 		return
 	}
+
+	s.clearInviteCookie(w, r)
 
 	if err := s.createSession(w, r, user.ID); err != nil {
 		log.Printf("ERROR: create session: %v", err)
@@ -372,13 +442,27 @@ func (s *Server) validateOAuthState(r *http.Request) error {
 	return nil
 }
 
-func (s *Server) getOrCreateUser(ctx context.Context, email, name string) (*model.User, error) {
+func (s *Server) getOrCreateUser(ctx context.Context, email, name, inviteCode string) (*model.User, error) {
 	user, err := s.store.GetUserByEmail(ctx, email)
 	if err == nil {
 		return user, nil
 	}
 	if err != sql.ErrNoRows {
 		return nil, err
+	}
+
+	// New user: enforce invite-only gating.
+	if s.config.InviteOnly {
+		if inviteCode == "" {
+			return nil, ErrInviteRequired
+		}
+		invite, err := s.store.GetInviteByCode(ctx, inviteCode)
+		if err != nil {
+			return nil, ErrInviteRequired
+		}
+		if invite.Email != "" && !strings.EqualFold(invite.Email, email) {
+			return nil, fmt.Errorf("this invite was issued for a different email address")
+		}
 	}
 
 	user = &model.User{
@@ -391,7 +475,28 @@ func (s *Server) getOrCreateUser(ctx context.Context, email, name string) (*mode
 	if err := s.store.CreateUser(ctx, user); err != nil {
 		return nil, err
 	}
+
+	// Consume the invite after successful user creation.
+	if s.config.InviteOnly && inviteCode != "" {
+		if err := s.store.RedeemInvite(ctx, inviteCode, user.ID); err != nil {
+			log.Printf("WARN: invite redemption failed for code=%s user=%s: %v",
+				inviteCode, user.ID, err)
+		}
+	}
+
 	return user, nil
+}
+
+func (s *Server) clearInviteCookie(w http.ResponseWriter, r *http.Request) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     inviteCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   strings.HasPrefix(s.config.BaseURL, "https"),
+	})
 }
 
 func (s *Server) createSession(w http.ResponseWriter, r *http.Request, userID string) error {

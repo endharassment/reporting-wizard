@@ -1,0 +1,67 @@
+{{template "layout.html" .}}
+
+{{define "title"}}Invite Management{{end}}
+
+{{define "content"}}
+<div class="container">
+    <h1>Invite Management</h1>
+
+    <h2>Create New Invite</h2>
+    <form action="/admin/invites" method="post">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <div class="form-group">
+            <label for="email">Restrict to Email (optional)</label>
+            <input type="email" id="email" name="email" placeholder="user@example.com">
+        </div>
+        <div class="form-group">
+            <label for="max_uses">Max Uses</label>
+            <input type="number" id="max_uses" name="max_uses" value="1" min="1">
+        </div>
+        <div class="form-group">
+            <label for="expires_at">Expires (optional)</label>
+            <input type="date" id="expires_at" name="expires_at">
+        </div>
+        <button type="submit" class="btn btn-primary">Create Invite</button>
+    </form>
+
+    <h2>Existing Invites</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Invite Link</th>
+                <th>Email Restriction</th>
+                <th>Usage</th>
+                <th>Status</th>
+                <th>Created By</th>
+                <th>Created</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Invites}}
+            <tr>
+                <td><code>{{$.BaseURL}}/invite/{{.Code}}</code></td>
+                <td>{{if .Email}}{{.Email}}{{else}}<em>Any</em>{{end}}</td>
+                <td>{{.UseCount}} / {{.MaxUses}}</td>
+                <td>
+                    {{if .Revoked}}Revoked
+                    {{else if ge .UseCount .MaxUses}}Exhausted
+                    {{else}}Active
+                    {{end}}
+                </td>
+                <td>{{index $.UserNames .CreatedBy}}</td>
+                <td>{{.CreatedAt.Format "2006-01-02"}}</td>
+                <td>
+                    {{if and (not .Revoked) (lt .UseCount .MaxUses)}}
+                    <form action="/admin/invites/{{.ID}}/revoke" method="post" style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                        <button type="submit" class="button-small button-danger">Revoke</button>
+                    </form>
+                    {{end}}
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+</div>
+{{end}}

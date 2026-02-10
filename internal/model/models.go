@@ -173,3 +173,17 @@ type EmailReply struct {
 	Body            string
 	CreatedAt       time.Time
 }
+
+// Invite represents a registration invite code for closed beta gating.
+type Invite struct {
+	ID        string
+	Code      string
+	Email     string // empty = unrestricted
+	CreatedBy string
+	UsedBy    string
+	MaxUses   int
+	UseCount  int
+	Revoked   bool
+	ExpiresAt time.Time // zero = no expiry
+	CreatedAt time.Time
+}

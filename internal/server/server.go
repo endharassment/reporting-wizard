@@ -36,6 +36,7 @@ type Config struct {
 	IMAPServer         string
 	IMAPUsername       string
 	IMAPPassword       string
+	InviteOnly         bool
 }
 
 // Snapshotter defines the interface for crawling and snapshotting URLs.
@@ -142,6 +143,7 @@ func (s *Server) routes() chi.Router {
 	r.Get("/auth/google/callback", s.HandleGoogleCallback)
 	r.Get("/auth/github", s.HandleGitHubLogin)
 	r.Get("/auth/github/callback", s.HandleGitHubCallback)
+	r.Get("/invite/{code}", s.HandleInviteLink)
 
 	// Authenticated routes.
 	r.Group(func(r chi.Router) {
@@ -171,6 +173,7 @@ func (s *Server) routes() chi.Router {
 		ah := admin.NewAdminHandler(s.store, s.discovery, s.emailCfg, s.templates,
 			UserFromContext,
 			func(ctx context.Context) string { return CSRFTokenFromContext(ctx) },
+			s.config.BaseURL,
 		)
 		if s.escalator != nil {
 			ah.SetEscalator(s.escalator)
@@ -191,6 +194,9 @@ func (s *Server) routes() chi.Router {
 		r.Get("/admin/users", ah.HandleListUsers)
 		r.Post("/admin/users/{userID}/ban", ah.HandleBanUser)
 		r.Post("/admin/users/{userID}/report-abuse", ah.HandleReportAbuse)
+		r.Get("/admin/invites", ah.HandleListInvites)
+		r.Post("/admin/invites", ah.HandleCreateInvite)
+		r.Post("/admin/invites/{inviteID}/revoke", ah.HandleRevokeInvite)
 	})
 
 	return r
